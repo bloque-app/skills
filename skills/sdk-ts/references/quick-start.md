@@ -82,9 +82,12 @@ const session = await bloque.register(ALIAS, {
 
 ## Connect to an Existing User
 
-**The alias MUST be identical to the one used in `register()`.** A mismatch (e.g., `'alice'` vs `'@alice'`, or different casing) will throw `BloqueNotFoundError`.
+**The alias MUST be identical to the one used in `register()`.** A mismatch (e.g., `'alice'` vs `'@alice'`, or different casing) will cause errors downstream.
+
+**Warning:** `connect()` always returns a session — it does NOT check if the user was registered. If you connect to an unregistered alias, calls like `card.create()` will fail later. Your app must ensure `register()` was called first.
 
 ```typescript
+// Ensure the user exists before connecting
 const user = await bloque.connect(ALIAS);  // Same alias as register()
 console.log('Connected:', user.urn);
 

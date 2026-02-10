@@ -112,6 +112,30 @@ const user = await bloque.connect('@Alice');  // ❌ BloqueNotFoundError
 
 **Rule:** Pick one alias string and reuse it everywhere. Store it in a constant or environment variable.
 
+## Critical: `connect()` Always Succeeds
+
+**`connect()` always returns a session — even if `register()` was never called for that alias.** It does NOT validate whether the identity exists. You will only discover the error later when you try to call account methods (e.g., `user.accounts.card.create()` will fail).
+
+The SDK does NOT provide a "user exists" check. **Your application must track whether a user has been registered before calling `connect()`.**
+
+```typescript
+// ❌ Wrong — no way to know if '@bob' was ever registered
+const user = await bloque.connect('@bob');       // Returns session (no error!)
+const card = await user.accounts.card.create();  // 💥 Fails here — identity not found
+
+// ✅ Correct — track registration state in your app
+const isRegistered = await db.users.exists('@bob');
+
+if (!isRegistered) {
+  await bloque.register('@bob', { type: 'individual', profile: { ... } });
+  await db.users.markRegistered('@bob');
+}
+
+const user = await bloque.connect('@bob');
+```
+
+**Rule:** Never assume `connect()` validates the user. Always ensure `register()` has been called first, using your own application logic.
+
 ## Error Handling
 
 All errors extend `BloqueAPIError` and include `requestId`, `timestamp`, and `toJSON()`:
