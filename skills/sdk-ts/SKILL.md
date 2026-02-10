@@ -95,6 +95,7 @@ For deeper guidance, read these files in order of relevance to the task:
 3. **MCC Routing** — Map Merchant Category Codes to pockets. Priority order determines fallback.
 4. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`.
 5. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
+6. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
 
 ## Critical: Alias Consistency
 

@@ -171,9 +171,9 @@ const card = await user.accounts.card.create(
 ## Common Operations (All Account Types)
 
 ```typescript
-// List all accounts → { accounts: Account[] }
+// List all accounts → { accounts: MappedAccount[] }
 const result = await user.accounts.list();
-console.log(result.accounts);  // Array of Account objects with balance
+console.log(result.accounts);  // CardAccount | VirtualAccount | PolygonAccount | etc.
 
 // List by type → { accounts: CardAccount[] }
 const cards = await user.accounts.card.list();
@@ -183,7 +183,7 @@ console.log(cards.accounts);   // Array of CardAccount with balance
 const balance = await user.accounts.balance(pocket.urn);
 console.log(balance['DUSD/6'].current);  // "50000000"
 
-// Get a specific account → Account
+// Get a specific account → MappedAccount (medium-specific)
 const account = await user.accounts.get(pocket.urn);
 
 // Lifecycle management → returns updated account object

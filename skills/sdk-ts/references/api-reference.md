@@ -99,33 +99,27 @@ const balance = await user.accounts.balance('did:bloque:account:virtual:...');
 }
 ```
 
-### `user.accounts.get(urn)` → `Account`
+### `user.accounts.get(urn)` → `MappedAccount`
+
+Returns a **medium-specific account type** (union of `CardAccount | VirtualAccount | PolygonAccount | BancolombiaAccount | UsAccount`), not a generic `Account`. Use the URN prefix to narrow the type (e.g., card URN → `CardAccount` with `detailsUrl`).
 
 ```typescript
 const account = await user.accounts.get('did:bloque:account:virtual:...');
+// For cards: CardAccount { lastFour, detailsUrl, productType, cardType, ... }
+// For virtual: VirtualAccount { firstName, lastName, ... }
+// For polygon: PolygonAccount { address, network, ... }
 ```
 
-**Returns:**
+**Returns (shapes vary by medium):**
 
-```typescript
-{
-  id: string;
-  urn: string;
-  medium: 'bancolombia' | 'card' | 'virtual' | 'polygon' | 'us-account';
-  details: unknown;           // Shape depends on medium
-  ledgerId: string;
-  status: 'active' | 'disabled' | 'frozen' | 'deleted'
-        | 'creation_in_progress' | 'creation_failed';
-  ownerUrn: string;
-  createdAt: string;          // ISO 8601
-  updatedAt: string;          // ISO 8601
-  webhookUrl: string | null;
-  metadata?: Record<string, unknown>;
-  balance: Record<string, TokenBalance>;
-}
-```
+- **CardAccount**: `urn`, `id`, `lastFour`, `detailsUrl`, `productType`, `cardType`, `ledgerId`, `status`, `ownerUrn`, `createdAt`, `updatedAt`, `webhookUrl`, `metadata`, `balance`
+- **VirtualAccount**: `urn`, `id`, `firstName`, `lastName`, `ledgerId`, `status`, ...
+- **PolygonAccount**: `urn`, `id`, `address`, `network`, `ledgerId`, `status`, ...
+- **BancolombiaAccount**, **UsAccount**: Similar structure with medium-specific fields.
 
-### `user.accounts.list(params?)` → `{ accounts: Account[] }`
+### `user.accounts.list(params?)` → `{ accounts: MappedAccount[] }`
+
+Same medium-specific mapping as `get()`. Each account is a `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, or `UsAccount` based on its `medium`.
 
 ```typescript
 const result = await user.accounts.list();
@@ -146,7 +140,7 @@ const result = await user.accounts.list({ urn: '...' });
 
 ```typescript
 {
-  accounts: Account[]   // Array of Account objects (same shape as get())
+  accounts: MappedAccount[]   // CardAccount | VirtualAccount | PolygonAccount | BancolombiaAccount | UsAccount
 }
 ```
 
@@ -285,7 +279,7 @@ const card = await user.accounts.card.create(
 
 ```typescript
 const fresh = await user.accounts.get(card.urn);
-// fresh.details contains the refreshed detailsUrl
+// For card URNs, get() returns CardAccount — fresh.detailsUrl is the refreshed URL
 // Use this URL immediately — it will expire again after a short window
 ```
 
