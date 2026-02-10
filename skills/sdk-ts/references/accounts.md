@@ -94,13 +94,31 @@ console.log(card.status);       // "active"
   urn: string;           id: string;
   lastFour: string;      productType: 'CREDIT' | 'DEBIT';
   status: AccountStatus; cardType: 'VIRTUAL' | 'PHYSICAL';
-  detailsUrl: string;    ownerUrn: string;
+  detailsUrl: string;    ownerUrn: string;   // ⚠️ detailsUrl expires — see below
   ledgerId: string;      webhookUrl: string | null;
   metadata?: Record<string, unknown>;
   createdAt: string;     updatedAt: string;
   balance?: Record<string, TokenBalance>;  // Only in list() responses
 }
 ```
+
+### Refreshing Card Details URL
+
+The `detailsUrl` is a signed, PCI-compliant URL that shows the full card number, CVV, and expiry. **It expires after a short window.** Do NOT cache it.
+
+To get a fresh URL, call `user.accounts.get()`:
+
+```typescript
+// ❌ Wrong — this URL may be expired
+const card = await user.accounts.card.create({ ledgerId: pocket.ledgerId }, { waitLedger: true });
+iframe.src = card.detailsUrl; // Might be expired if time has passed
+
+// ✅ Correct — fetch a fresh URL right before displaying
+const fresh = await user.accounts.get(card.urn);
+iframe.src = fresh.detailsUrl; // Fresh signed URL, ready to use
+```
+
+Always call `user.accounts.get(card.urn)` to obtain a fresh `detailsUrl` right before rendering it to the user.
 
 ## Create a Polygon Wallet
 

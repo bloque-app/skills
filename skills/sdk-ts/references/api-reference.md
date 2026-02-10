@@ -267,7 +267,7 @@ const card = await user.accounts.card.create(
   status: 'active' | 'disabled' | 'frozen' | 'deleted'
         | 'creation_in_progress' | 'creation_failed';
   cardType: 'VIRTUAL' | 'PHYSICAL';
-  detailsUrl: string;          // PCI-compliant URL to view card number/CVV
+  detailsUrl: string;          // PCI-compliant URL to view card number/CVV (expires!)
   ownerUrn: string;
   ledgerId: string;
   webhookUrl: string | null;
@@ -275,6 +275,14 @@ const card = await user.accounts.card.create(
   createdAt: string;
   updatedAt: string;
 }
+```
+
+**Important — `detailsUrl` expires.** The `detailsUrl` returned from `create()` or `list()` is a signed URL with a limited TTL. To get a fresh, non-expired URL for viewing card details (number, CVV, expiry), call `user.accounts.get()`:
+
+```typescript
+const fresh = await user.accounts.get(card.urn);
+// fresh.details contains the refreshed detailsUrl
+// Use this URL immediately — it will expire again after a short window
 ```
 
 ### `user.accounts.card.list(params?)` → `{ accounts: CardAccount[] }`
