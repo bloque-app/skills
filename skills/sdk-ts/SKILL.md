@@ -1,5 +1,5 @@
 ---
-name: bloque-sdk-integration
+name: bloque-sdk-ts
 description: >
   Integration guide for the Bloque SDK — a TypeScript SDK for programmable
   financial accounts, cards with spending controls, and multi-asset transfers.
