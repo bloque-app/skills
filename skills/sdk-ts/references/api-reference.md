@@ -67,8 +67,10 @@ const session = await bloque.register('@alice', {
 
 Connects to an existing user. Returns the same `Session` shape as `register`.
 
+**Critical:** The `alias` must be **exactly** the same string used in `register()`. Any difference (missing `@`, different casing, extra spaces) will throw `BloqueNotFoundError`.
+
 ```typescript
-const user = await bloque.connect('@alice');
+const user = await bloque.connect('@alice');  // Must match register('@alice', ...)
 // user.urn, user.accounts, user.compliance, etc.
 ```
 

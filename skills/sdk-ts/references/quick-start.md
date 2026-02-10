@@ -61,7 +61,9 @@ const bloque = new SDK({
 ## Register a New User
 
 ```typescript
-const session = await bloque.register('@alice', {
+const ALIAS = '@alice';  // Store alias in a constant — reuse everywhere
+
+const session = await bloque.register(ALIAS, {
   type: 'individual',
   profile: {
     firstName: 'Alice',
@@ -80,8 +82,10 @@ const session = await bloque.register('@alice', {
 
 ## Connect to an Existing User
 
+**The alias MUST be identical to the one used in `register()`.** A mismatch (e.g., `'alice'` vs `'@alice'`, or different casing) will throw `BloqueNotFoundError`.
+
 ```typescript
-const user = await bloque.connect('@alice');
+const user = await bloque.connect(ALIAS);  // Same alias as register()
 console.log('Connected:', user.urn);
 
 // Now use any client:

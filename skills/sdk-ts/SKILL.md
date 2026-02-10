@@ -1,5 +1,5 @@
 ---
-name:  bloque-sdk-ts
+name: bloque-sdk-ts
 description: >
   Integration guide for the Bloque SDK — a TypeScript SDK for programmable
   financial accounts, cards with spending controls, and multi-asset transfers.
@@ -95,6 +95,22 @@ For deeper guidance, read these files in order of relevance to the task:
 3. **MCC Routing** — Map Merchant Category Codes to pockets. Priority order determines fallback.
 4. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`.
 5. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
+
+## Critical: Alias Consistency
+
+**The alias used in `register()` and `connect()` MUST be identical.** If you register a user as `'@alice'`, you must connect with exactly `'@alice'` — not `'alice'`, `'@Alice'`, or any variation. A mismatch will throw a `BloqueNotFoundError` ("identity not found").
+
+```typescript
+// Register
+await bloque.register('@alice', { type: 'individual', profile: { ... } });
+
+// Connect — MUST use the exact same alias
+const user = await bloque.connect('@alice');  // ✅ correct
+const user = await bloque.connect('alice');   // ❌ BloqueNotFoundError
+const user = await bloque.connect('@Alice');  // ❌ BloqueNotFoundError
+```
+
+**Rule:** Pick one alias string and reuse it everywhere. Store it in a constant or environment variable.
 
 ## Error Handling
 
