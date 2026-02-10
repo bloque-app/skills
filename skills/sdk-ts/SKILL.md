@@ -5,7 +5,8 @@ description: >
   financial accounts, cards with spending controls, and multi-asset transfers.
   Use when the user asks to "integrate Bloque", "create a card", "set up
   spending controls", "handle card webhooks", "transfer funds", "create
-  pockets", "set up MCC routing", or build any fintech feature on the
+  pockets", "set up MCC routing", "share balances between any mediums",
+  "same balance across pockets/cards/Polygon/bank", or build any fintech feature on the
   Bloque platform.
 license: MIT
 metadata:
@@ -23,6 +24,7 @@ Use this skill when:
 
 - Integrating the Bloque SDK into a new or existing project
 - Creating accounts (virtual pockets, cards, Polygon wallets, bank accounts)
+- Sharing balances between any mediums — pockets, Polygon, cards, bank accounts (use the same `ledgerId`)
 - Setting up card spending controls (default or smart MCC routing)
 - Handling card transaction webhooks
 - Transferring funds between accounts (single or batch)
@@ -96,6 +98,30 @@ For deeper guidance, read these files in order of relevance to the task:
 4. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`.
 5. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
 6. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
+
+## Critical: Sharing Balances — Use the Same Ledger ID
+
+**To share balances between any account mediums** (virtual/pocket, Polygon, card, Bancolombia, US, etc.), **all of those accounts must use the same `ledgerId`.** The ledger is the single balance pool; any accounts that share a `ledgerId` see the same balance and can move funds between them (e.g., crypto on Polygon → pocket → card spending, or bank deposits → same balance).
+
+- Create one **virtual account (pocket)** first with `{ waitLedger: true }` and capture its `ledgerId`.
+- When creating **any other medium** (Polygon, card, Bancolombia, US, etc.), pass that same `ledgerId` so they attach to the same ledger.
+- Different `ledgerId` values = separate balance pools. Same `ledgerId` = shared balance across all linked accounts, regardless of medium.
+
+```typescript
+// One ledger = shared balance across any mediums (pocket, Polygon, card, bank, etc.)
+const pocket = await user.accounts.virtual.create({}, { waitLedger: true });
+
+const polygon = await user.accounts.polygon.create(
+  { ledgerId: pocket.ledgerId },  // same ledger → shared balance
+  { waitLedger: true },
+);
+
+const card = await user.accounts.card.create(
+  { ledgerId: pocket.ledgerId, name: 'My Card' },  // same ledger → shared balance
+  { waitLedger: true },
+);
+// Any medium created with pocket.ledgerId shares the same balance.
+```
 
 ## Critical: Alias Consistency
 
