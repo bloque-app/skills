@@ -43,8 +43,8 @@ const session = await bloque.register('@alice', {
     city?: string;
     state?: string;
     postalCode?: string;
-    countryOfBirthCode?: string;
-    countryOfResidenceCode?: string;
+    countryOfBirthCode?: string;   // 3-letter ISO 3166-1 alpha-3 (e.g. USA, COL)
+    countryOfResidenceCode?: string; // 3-letter ISO 3166-1 alpha-3 (e.g. USA, COL)
   },
 });
 ```
@@ -571,11 +571,11 @@ const account = await user.accounts.us.create({
     city: string;
     state: string;
     postalCode: string;
-    country: string;
+    country: string;                // 3-letter ISO 3166-1 alpha-3 (e.g. USA)
   };
   birthDate: string;                // 'YYYY-MM-DD'
   taxIdentificationNumber: string;  // SSN or EIN
-  govIdCountry: string;             // 'US'
+  govIdCountry: string;             // 3-letter ISO 3166-1 alpha-3 (e.g. USA)
   govIdImageFront: string;          // Base64 image
   signedAgreementId: string;        // From TOS acceptance
   name?: string;
@@ -842,7 +842,7 @@ const org = await user.orgs.create({
     tax_id: string;
     incorporation_date: string;
     business_type: string;
-    incorporation_country_code: string;
+    incorporation_country_code: string;  // 3-letter ISO 3166-1 alpha-3 (e.g. USA, COL)
     address_line1: string;
     postal_code: string;
     city: string;

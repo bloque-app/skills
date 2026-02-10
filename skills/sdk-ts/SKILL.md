@@ -46,6 +46,7 @@ Use this skill when:
 **Platforms**: Node.js, Bun, Deno (API key auth) | Browser, React Native (JWT auth)
 **Assets**: `DUSD/6`, `COPB/6`, `COPM/2`, `KSM/12`
 **Amounts**: Always strings to preserve precision. `"10000000"` = 10 DUSD (6 decimals).
+**Country codes**: Must be **3 letters** (ISO 3166-1 alpha-3), e.g. `USA`, `COL`, `GBR`. Do not use 2-letter codes.
 
 ## Quick Start
 
@@ -63,7 +64,7 @@ await bloque.register('@alice', {
   type: 'individual',
   profile: { firstName: 'Alice', lastName: 'Smith', email: 'alice@example.com',
     phone: '+1234567890', birthdate: '1990-01-01', city: 'Miami', state: 'FL',
-    postalCode: '33101', countryOfBirthCode: 'US', countryOfResidenceCode: 'US' },
+    postalCode: '33101', countryOfBirthCode: 'USA', countryOfResidenceCode: 'USA' },
 });
 
 // Connect to an existing user
@@ -98,6 +99,7 @@ For deeper guidance, read these files in order of relevance to the task:
 4. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`.
 5. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
 6. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
+7. **Country codes** — Always **3 letters** (ISO 3166-1 alpha-3): e.g. `USA`, `COL`, `GBR`. Use for `countryOfBirthCode`, `countryOfResidenceCode`, and any other country fields. Do not use 2-letter codes (e.g. `US`, `CO`).
 
 ## Critical: Sharing Balances — Use the Same Ledger ID
 

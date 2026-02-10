@@ -74,8 +74,8 @@ const session = await bloque.register(ALIAS, {
     city: 'Miami',
     state: 'FL',
     postalCode: '33101',
-    countryOfBirthCode: 'US',
-    countryOfResidenceCode: 'US',
+    countryOfBirthCode: 'USA',   // 3-letter code required
+    countryOfResidenceCode: 'USA',
   },
 });
 ```
