@@ -198,39 +198,49 @@ const result = await user.accounts.batchTransfer({
 }
 ```
 
-### `user.accounts.movements(params)` → `Movement[]`
+### `user.accounts.movements(params)` → `ListMovementsResult`
+
+Returns a **paged result** with `data`, `pageSize`, `hasMore`, and optional `next` token.
 
 ```typescript
-const movements = await user.accounts.movements({
+const result = await user.accounts.movements({
   urn: string;
-  asset?: SupportedAsset;
+  asset?: SupportedAsset;      // Default: 'DUSD/6'
   limit?: number;
   before?: string;             // ISO 8601
   after?: string;              // ISO 8601
   reference?: string;
   direction?: 'in' | 'out';
+  pocket?: 'main' | 'pending';  // 'main' = confirmed, 'pending' = pending movements
   collapsed_view?: boolean;
+  next?: string;               // Pagination token from previous response
 });
 ```
 
 **Returns:**
 
 ```typescript
-Array<{
-  amount: string;
-  asset: string;
-  fromAccountId: string;
-  toAccountId: string;
-  direction: 'in' | 'out' | 'failed';
-  reference: string;
-  railName: string;
-  status: 'pending' | 'confirmed' | 'settled' | 'cancelled' | 'failed' | 'ignored';
-  details: {
-    type: string;
-    metadata: Record<string, unknown>;  // See transfers.md for metadata shapes
-  };
-  createdAt: string;
-}>
+{
+  data: Array<{
+    amount: string;
+    asset: string;
+    fromAccountId: string;
+    toAccountId: string;
+    direction: 'in' | 'out';
+    type: 'deposit' | 'withdraw' | 'transfer';
+    reference: string;
+    railName: string;
+    status: 'pending' | 'cancelled' | 'confirmed' | 'settled' | 'failed' | 'ignored';
+    details: {
+      type?: string;
+      metadata?: Record<string, unknown>;  // See transfers.md for metadata shapes
+    };
+    createdAt: string;
+  }>;
+  pageSize: number;
+  hasMore: boolean;
+  next?: string;   // Present when hasMore is true
+}
 ```
 
 ---
@@ -323,10 +333,12 @@ const balance = await user.accounts.card.balance({ urn: card.urn });
 }
 ```
 
-### `user.accounts.card.movements(params)` → `CardMovement[]`
+### `user.accounts.card.movements(params)` → `ListMovementsPagedResult`
+
+Returns a **paged result** with `data`, `pageSize`, `hasMore`, and optional `next` token. Each item in `data` is a `CardMovement` (same shape as `Movement` with snake_case fields from API).
 
 ```typescript
-const movements = await user.accounts.card.movements({
+const result = await user.accounts.card.movements({
   urn: string;
   asset?: SupportedAsset;
   limit?: number;
@@ -334,11 +346,24 @@ const movements = await user.accounts.card.movements({
   after?: string;
   reference?: string;
   direction?: 'in' | 'out';
+  pocket?: 'main' | 'pending';  // 'main' = confirmed, 'pending' = pending movements
   collapsed_view?: boolean;
+  next?: string;                // Pagination token from previous response
 });
 ```
 
-**Returns:** Same shape as `Movement[]` (see `user.accounts.movements`). The `details.metadata` contains card-specific fields like `merchant_name`, `merchant_mcc`, `fee_breakdown`, etc. See `transfers.md` for full metadata shapes.
+**Returns:**
+
+```typescript
+{
+  data: CardMovement[];   // Same movement shape as user.accounts.movements (with type, status, etc.)
+  pageSize: number;
+  hasMore: boolean;
+  next?: string;
+}
+```
+
+The `details.metadata` in each movement contains card-specific fields like `merchant_name`, `merchant_mcc`, `fee_breakdown`, etc. See `transfers.md` for full metadata shapes. **Note:** `card.movements()` returns `data` in API (snake_case) format; `user.accounts.movements()` returns `data` in camelCase (e.g. `fromAccountId`, `createdAt`).
 
 ### `user.accounts.card.updateMetadata(params)` → `CardAccount`
 

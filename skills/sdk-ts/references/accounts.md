@@ -206,20 +206,33 @@ const renamed = await user.accounts.card.updateName(card.urn, 'My New Card Name'
 
 ## Query Transactions
 
+Movements are returned in a **paged result** with `data`, `pageSize`, `hasMore`, and optional `next` token.
+
 ```typescript
-// Returns Movement[] (an array directly, NOT wrapped in an object)
-const movements = await user.accounts.card.movements({
+// Returns { data: Movement[], pageSize, hasMore, next? }
+const result = await user.accounts.card.movements({
   urn: card.urn,
-  asset: 'DUSD/6',         // Filter by asset
-  limit: 50,                // Max results
-  direction: 'out',         // 'in' | 'out'
+  asset: 'DUSD/6',         // Required: filter by asset
+  limit: 50,               // Max results per page
+  direction: 'out',        // 'in' | 'out'
   before: '2025-12-31T00:00:00Z',
   after: '2025-01-01T00:00:00Z',
+  pocket: 'main',          // Optional: 'main' (confirmed) | 'pending'
+  collapsed_view: true,    // Optional: collapse related movements
 });
 
-for (const m of movements) {
-  console.log(m.amount, m.asset, m.direction, m.reference);
+for (const m of result.data) {
+  console.log(m.amount, m.asset, m.direction, m.type, m.reference);
   console.log(m.details.metadata);  // Transaction details (merchant, fees, etc.)
+}
+
+// Next page
+if (result.hasMore && result.next) {
+  const nextPage = await user.accounts.card.movements({
+    urn: card.urn,
+    asset: 'DUSD/6',
+    next: result.next,
+  });
 }
 ```
 

@@ -61,29 +61,34 @@ for (const chunk of result.chunks) {
 
 ## Query Movements (Transaction History)
 
+Both `user.accounts.movements()` and `user.accounts.card.movements()` return a **paged result**: `{ data, pageSize, hasMore, next? }`. Use `next` to fetch the next page.
+
 ```typescript
-// Card movements
-const cardMovements = await user.accounts.card.movements({
+// Card movements (paged)
+const cardResult = await user.accounts.card.movements({
   urn: card.urn,
-  asset: 'DUSD/6',
+  asset: 'DUSD/6',           // Required
   limit: 50,
-  direction: 'out',                      // 'in' | 'out'
+  direction: 'out',         // 'in' | 'out'
   after: '2025-01-01T00:00:00Z',
   before: '2025-12-31T00:00:00Z',
-  // reference: '0x...',                 // Filter by specific reference
-  // collapsed_view: true,               // Grouped/summarized view
+  pocket: 'main',           // 'main' (confirmed) | 'pending'
+  collapsed_view: true,     // Group related movements
+  next: undefined,          // Pagination token from previous response
 });
+// cardResult.data, cardResult.pageSize, cardResult.hasMore, cardResult.next
 
-// General account movements
-const movements = await user.accounts.movements({
+// General account movements (paged)
+const result = await user.accounts.movements({
   urn: pocket.urn,
   asset: 'DUSD/6',
 });
+// result.data, result.pageSize, result.hasMore, result.next
 ```
 
 ## Movement Object Shape
 
-Every movement returned by `card.movements()` or `accounts.movements()` has this shape:
+Every movement in `result.data` (from `card.movements()` or `accounts.movements()`) has this shape:
 
 ```typescript
 interface Movement {
@@ -91,13 +96,14 @@ interface Movement {
   asset: string;             // Asset (e.g., "DUSD/6", "COPM/2")
   fromAccountId: string;     // Source ledger account ID
   toAccountId: string;       // Destination ledger account ID
-  direction: 'in' | 'out' | 'failed';
+  direction: 'in' | 'out';
+  type: 'deposit' | 'withdraw' | 'transfer';  // Transaction type
   reference: string;         // Unique reference (see patterns below)
   railName: string;          // Processing rail
-  status: 'pending' | 'confirmed' | 'settled' | 'cancelled' | 'failed' | 'ignored';
+  status: 'pending' | 'cancelled' | 'confirmed' | 'settled' | 'failed' | 'ignored';
   details: {
-    type: string;            // Movement classification
-    metadata: Record<string, unknown>;  // Transaction details (see below)
+    type?: string;          // Movement classification (card metadata)
+    metadata?: Record<string, unknown>;  // Transaction details (see below)
   };
   createdAt: string;         // ISO 8601 timestamp
 }
@@ -295,14 +301,14 @@ Top-ups don't have merchant or card info — they're simple ledger movements.
 ### Display a User's Card Purchase History
 
 ```typescript
-const movements = await user.accounts.card.movements({
+const result = await user.accounts.card.movements({
   urn: card.urn,
   asset: 'DUSD/6',
   direction: 'out',
   limit: 20,
 });
 
-for (const m of movements) {
+for (const m of result.data) {
   const meta = m.details.metadata;
   if (meta?.type === 'PURCHASE') {
     console.log(`${meta.merchant_name} — ${meta.local_amount} ${meta.local_currency}`);
@@ -320,21 +326,19 @@ for (const m of movements) {
 
 ### Find All Movements for a Specific Transaction
 
-Use the `reference` field to correlate purchase + fees:
+Use the `reference` field to correlate purchase + fees. For large histories, paginate with `next`:
 
 ```typescript
 const txId = 'ctx-200kXoaEJLNzcsvNxY1pmBO7fEx';
+let page = await user.accounts.card.movements({ urn: card.urn, asset: 'DUSD/6' });
+let purchase = page.data.find(m => m.reference === `${txId}:purchase`);
+let fees = page.data.filter(m => m.reference.startsWith(`${txId}:fee:`));
 
-const allMovements = await user.accounts.card.movements({
-  urn: card.urn,
-  asset: 'DUSD/6',
-});
-
-// The purchase movement
-const purchase = allMovements.find(m => m.reference === `${txId}:purchase`);
-
-// Its fee movements
-const fees = allMovements.filter(m => m.reference.startsWith(`${txId}:fee:`));
+while (!purchase && page.hasMore && page.next) {
+  page = await user.accounts.card.movements({ urn: card.urn, asset: 'DUSD/6', next: page.next });
+  purchase = page.data.find(m => m.reference === `${txId}:purchase`);
+  if (fees.length === 0) fees = page.data.filter(m => m.reference.startsWith(`${txId}:fee:`));
+}
 
 console.log('Purchase:', purchase?.amount, purchase?.asset);
 for (const fee of fees) {
@@ -346,13 +350,13 @@ for (const fee of fees) {
 ### Track Refunds
 
 ```typescript
-const movements = await user.accounts.card.movements({
+const result = await user.accounts.card.movements({
   urn: card.urn,
   asset: 'DUSD/6',
   direction: 'in',  // Refunds are incoming
 });
 
-const refunds = movements.filter(m => m.details.metadata?.type === 'CREDIT_ADJUSTMENT');
+const refunds = result.data.filter(m => m.details.metadata?.type === 'CREDIT_ADJUSTMENT');
 
 for (const refund of refunds) {
   const meta = refund.details.metadata;
@@ -365,7 +369,7 @@ for (const refund of refunds) {
 ### Calculate Total Spending by MCC Category
 
 ```typescript
-const movements = await user.accounts.card.movements({
+const result = await user.accounts.card.movements({
   urn: card.urn,
   asset: 'DUSD/6',
   direction: 'out',
@@ -373,7 +377,7 @@ const movements = await user.accounts.card.movements({
 
 const byCategory = new Map<string, bigint>();
 
-for (const m of movements) {
+for (const m of result.data) {
   const meta = m.details.metadata;
   if (meta?.type === 'PURCHASE' && meta?.merchant_mcc) {
     const mcc = meta.merchant_mcc as string;
