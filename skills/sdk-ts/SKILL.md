@@ -11,12 +11,12 @@ description: >
 license: MIT
 metadata:
   author: bloque
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Bloque SDK Integration
 
-TypeScript SDK for programmable financial infrastructure: accounts, cards, spending controls, transfers, and webhooks.
+TypeScript SDK for programmable financial infrastructure: identity, accounts, cards, compliance, transfers, swap, and webhooks.
 
 ## When to Apply
 
@@ -26,8 +26,12 @@ Use this skill when:
 - Creating accounts (virtual pockets, cards, Polygon wallets, bank accounts)
 - Sharing balances between any mediums — pockets, Polygon, cards, bank accounts (use the same `ledgerId`)
 - Setting up card spending controls (default or smart MCC routing)
+- Implementing browser/mobile JWT auth and OTP login (`assert` / `connect` / `me`)
+- Bootstrapping a singleton authenticated SDK client in SPA apps
+- Launching or resuming KYC verification flows
 - Handling card transaction webhooks
 - Transferring funds between accounts (single or batch)
+- Creating top-ups via bank transfer (`swap.findRates` + `swap.bankTransfer.create`)
 - Building budgeting or expense-management features
 - Querying balances or transaction history
 
@@ -47,6 +51,31 @@ Use this skill when:
 **Assets**: `DUSD/6`, `COPB/6`, `COPM/2`, `KSM/12`
 **Amounts**: Always strings to preserve precision. `"10000000"` = 10 DUSD (6 decimals).
 **Country codes**: Must be **3 letters** (ISO 3166-1 alpha-3), e.g. `USA`, `COL`, `GBR`. Do not use 2-letter codes.
+
+## Wallet-Style Workflow (JWT + OTP + KYC)
+
+Use this flow for frontend wallets similar to `/projects/wallet/src`:
+
+1. Create SDK with `auth: { type: 'jwt' }`, `platform: 'browser'`, `origin`, and optional custom `baseUrl`.
+2. For OTP login:
+   - `sdk.assert(origin, alias)` to send code
+   - `sdk.connect(origin, alias, code)` to establish session
+   - `sdk.me()` to hydrate user profile in app state
+3. Initialize app-wide authenticated client once (`await sdk.authenticate()`), then expose it through a singleton/provider/proxy.
+4. Resolve KYC:
+   - `bloque.compliance.kyc.getVerification({ urn })`
+   - if 404 or missing `url`, call `bloque.compliance.kyc.startVerification({ urn })`
+5. Use accounts/cards/swap methods through the authenticated client.
+
+## API Surface Commonly Needed in Wallet Apps
+
+| Domain | Methods |
+|------|-------------|
+| Identity/Auth | `assert`, `connect`, `me`, `authenticate` |
+| Accounts | `accounts.get`, `accounts.balance`, `accounts.balances`, `accounts.movements`, `accounts.transactions` |
+| Cards | `accounts.card.list`, `accounts.card.freeze`, `accounts.card.activate`, `accounts.card.updateName` |
+| Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification` |
+| Swap/Top-up | `swap.findRates`, `swap.bankTransfer.create` |
 
 ## Quick Start
 
@@ -88,6 +117,7 @@ For deeper guidance, read these files in order of relevance to the task:
 | `references/quick-start.md` | First-time setup, configuration, auth strategies |
 | `references/accounts.md` | Creating pockets, Polygon wallets, bank accounts |
 | `references/cards-and-spending-controls.md` | Card creation, default/smart spending, MCC routing, **fee configuration** (`spending_fees`, rules) |
+| `references/transfers.md` | Movements, balances, and swap/bank-transfer flows |
 | `references/webhooks.md` | Handling transaction events, webhook payloads |
 | `references/transfers.md` | Moving funds, batch transfers, movement metadata |
 
