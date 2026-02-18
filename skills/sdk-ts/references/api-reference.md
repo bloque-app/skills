@@ -255,7 +255,7 @@ const card = await user.accounts.card.create(
     name?: string;
     webhookUrl?: string;
     ledgerId?: string;         // Links card to a pocket
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;  // See cards-and-spending-controls.md
   },
   {
     waitLedger?: boolean;      // Default: false. Wait for ledger provisioning.
@@ -263,6 +263,8 @@ const card = await user.accounts.card.create(
   }
 );
 ```
+
+**Metadata** (see `references/cards-and-spending-controls.md` for full detail): `spending_control` (`'default'` | `'smart'`), `default_asset`, `fallback_asset`, `currency_asset_map`, `mcc_whitelist` / `priority_mcc` (smart only), and **`spending_fees`** — array of fee overrides with optional conditional **rules** (`fx_conversion`, `amount_range_usd`, `wallet`). Fees are merged by `fee_name` (defaults → origin → card); base fees cannot be removed.
 
 **Returns: `CardAccount`**
 
@@ -935,3 +937,32 @@ Used by all `create()` methods:
 ```
 
 **Important:** Always pass `{ waitLedger: true }` when you need `ledgerId` immediately after creation (e.g., to create a card linked to a pocket).
+
+### `SpendingFee` (card metadata)
+
+Used in `metadata.spending_fees` for card create/update. See `references/cards-and-spending-controls.md` for merge rules and conditional rules.
+
+```typescript
+{
+  fee_name: string;       // e.g. "interchange", "fx"
+  account_urn: string;    // Destination for the fee
+  type: 'percentage' | 'flat';
+  value: number;         // Rate (0.0144 = 1.44%) or flat scaled amount
+  category?: 'fx' | 'interchange' | 'custom';  // Purpose (defaults to 'custom')
+  rule?: string;         // Optional: 'fx_conversion' | 'amount_range_usd' | 'wallet'
+  rule_params?: Record<string, unknown>;
+}
+```
+
+### `FeeBreakdown` (in movement metadata / webhooks)
+
+```typescript
+{
+  total_fees: string;          // Total fees as scaled BigInt string
+  fees: Array<{
+    fee_name: string;          // Fee identifier
+    amount: string;            // Fee amount as scaled BigInt string
+    rate: number;              // The rate or flat value used
+  }>;
+}
+```

@@ -156,8 +156,7 @@ When a card is swiped/tapped/used online. Direction: `out` from the pocket.
   "merchant_country": "COL",
   "merchant_terminal_id": "TID-001",
   "fee_breakdown": {
-    "total": "343",
-    "settlement": "9606",
+    "total_fees": "343",
     "fees": [
       { "fee_name": "interchange", "amount": "143", "rate": 0.0144 },
       { "fee_name": "fx", "amount": "200", "rate": 0.02 }
@@ -166,7 +165,7 @@ When a card is swiped/tapped/used online. Direction: `out` from the pocket.
 }
 ```
 
-**Reading this**: A purchase of 99.49 COP at "Exito Laureles" (grocery store, MCC 5411). Debited 9949 units of COPM/2 from the pocket. Fees: 143 interchange + 200 FX = 343 total. Net settlement: 9606.
+**Reading this**: A purchase of 99.49 COP at "Exito Laureles" (grocery store, MCC 5411). Debited 9949 units of COPM/2 from the pocket. Fees: 143 interchange + 200 FX = 343 total.
 
 ### Fee Movement
 
@@ -210,8 +209,7 @@ When a merchant refunds a transaction. Direction: `in` to the pocket.
   "card_provider": "MASTERCARD",
   "user_id": "u-xyz789",
   "fee_breakdown": {
-    "total": "343",
-    "settlement": "9606",
+    "total_fees": "343",
     "fees": [
       { "fee_name": "interchange", "amount": "143", "rate": 0.0144 },
       { "fee_name": "fx", "amount": "200", "rate": 0.02 }
@@ -240,8 +238,7 @@ Additional charge or correction after the original authorization. Direction: `ou
   "card_provider": "MASTERCARD",
   "user_id": "u-xyz789",
   "fee_breakdown": {
-    "total": "34",
-    "settlement": "966",
+    "total_fees": "34",
     "fees": [
       { "fee_name": "interchange", "amount": "14", "rate": 0.0144 },
       { "fee_name": "fx", "amount": "20", "rate": 0.02 }
@@ -292,7 +289,7 @@ Top-ups don't have merchant or card info — they're simple ledger movements.
 | `merchant_terminal_id` | `string` | Purchases | Terminal ID |
 | `fee_type` | `string` | Fee movements | Fee name (e.g., `interchange`, `fx`) |
 | `fee_rate` | `number` | Fee movements | Fee rate (e.g., `0.0144`) |
-| `fee_breakdown` | `object` | Purchases, Adjustments | Total fees, individual fees, and net settlement |
+| `fee_breakdown` | `object` | Purchases, Adjustments | Total fees and individual fees breakdown |
 | `parent_reference` | `string` | Fee movements | Reference of the purchase that triggered this fee |
 | `installments` | `string` | Purchases | Number of installments (if applicable) |
 
@@ -315,7 +312,7 @@ for (const m of result.data) {
     console.log(`  MCC: ${meta.merchant_mcc} | Card: ***${meta.card_last_four}`);
     console.log(`  Debited: ${m.amount} ${m.asset}`);
     if (meta.fee_breakdown) {
-      console.log(`  Fees: ${meta.fee_breakdown.total} | Net: ${meta.fee_breakdown.settlement}`);
+      console.log(`  Fees: ${meta.fee_breakdown.total_fees}`);
     }
     console.log(`  Ref: ${m.reference}`);
     console.log(`  Date: ${m.createdAt}`);

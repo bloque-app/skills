@@ -87,20 +87,21 @@ For deeper guidance, read these files in order of relevance to the task:
 | `references/api-reference.md` | **Read first for any integration.** All methods, params, and exact return types. |
 | `references/quick-start.md` | First-time setup, configuration, auth strategies |
 | `references/accounts.md` | Creating pockets, Polygon wallets, bank accounts |
-| `references/cards-and-spending-controls.md` | Card creation, default/smart spending, MCC routing |
+| `references/cards-and-spending-controls.md` | Card creation, default/smart spending, MCC routing, **fee configuration** (`spending_fees`, rules) |
 | `references/webhooks.md` | Handling transaction events, webhook payloads |
 | `references/transfers.md` | Moving funds, batch transfers, movement metadata |
 
 ## Key Concepts
 
 1. **Pockets** — Virtual accounts that hold funds. Every card must be linked to a pocket via `ledgerId`.
-2. **Spending Controls** — `"default"` (one pocket, all merchants) or `"smart"` (MCC-based multi-pocket routing).
-3. **MCC Routing** — Map Merchant Category Codes to pockets. Priority order determines fallback.
-4. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`.
-5. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
-6. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
-7. **Movements are paged** — `user.accounts.movements()` and `user.accounts.card.movements()` return `{ data, pageSize, hasMore, next? }`. Use `result.data` for the list of movements; use `next` to fetch the next page when `hasMore` is true. Optional param `pocket`: `'main'` (confirmed) or `'pending'`.
-8. **Country codes** — Always **3 letters** (ISO 3166-1 alpha-3): e.g. `USA`, `COL`, `GBR`. Use for `countryOfBirthCode`, `countryOfResidenceCode`, and any other country fields. Do not use 2-letter codes (e.g. `US`, `CO`).
+2. **Spending Controls** — `"default"` (one pocket, all merchants) or `"smart"` (MCC-based multi-pocket routing). Configure via `metadata.spending_control`, `mcc_whitelist`, `priority_mcc`, `default_asset`, `fallback_asset`, `currency_asset_map`.
+3. **MCC Routing** — Map Merchant Category Codes to pockets. Priority order determines fallback. MCC whitelists can be inline arrays or URLs returning JSON arrays.
+4. **Fee Configuration** — Fees configured via `metadata.spending_fees` array. Merged by `fee_name` across three layers: defaults → origin metadata → card metadata. Each fee can be unconditional or gated by conditional **rules** (`fx_conversion`, `amount_range_usd`, `wallet`). Base fees cannot be removed, only overridden.
+5. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`. Include `fee_breakdown` showing which fees were applied.
+6. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
+7. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
+8. **Movements are paged** — `user.accounts.movements()` and `user.accounts.card.movements()` return `{ data, pageSize, hasMore, next? }`. Use `result.data` for the list of movements; use `next` to fetch the next page when `hasMore` is true. Optional param `pocket`: `'main'` (confirmed) or `'pending'`.
+9. **Country codes** — Always **3 letters** (ISO 3166-1 alpha-3): e.g. `USA`, `COL`, `GBR`. Use for `countryOfBirthCode`, `countryOfResidenceCode`, and any other country fields. Do not use 2-letter codes (e.g. `US`, `CO`).
 
 ## Critical: Sharing Balances — Use the Same Ledger ID
 

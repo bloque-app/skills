@@ -28,31 +28,32 @@ await user.accounts.batchTransfer({
 
 ## Event Types
 
-### Authorization Events
-
-Triggered when a card purchase is attempted.
-
-| Event Type | Direction | Description |
-|------------|-----------|-------------|
-| `authorization` | `debit` | Purchase approved — funds debited |
-| `authorization` | `debit` | Purchase rejected — insufficient funds |
-| `authorization` | `debit` | Purchase rejected — unsupported currency |
-
-### Adjustment Events
-
-Triggered after the original authorization (refunds, chargebacks, corrections).
-
-| Event Type | Direction | Description |
-|------------|-----------|-------------|
-| `adjustment` | `credit` | Refund — funds returned to account |
-| `adjustment` | `debit` | Additional charge or correction |
+| Event | Type | Direction | Description |
+|-------|------|-----------|-------------|
+| `purchase` | `authorization` | `debit` | Card purchase authorized and debited. |
+| `rejected_insufficient_funds` | `authorization` | `debit` | Purchase rejected — insufficient balance. |
+| `rejected_credit` | `authorization` | `credit` | Credit authorization rejected (not supported). |
+| `rejected_currency` | `authorization` | `debit` | Purchase rejected — unsupported currency. |
+| `credit_adjustment` | `adjustment` | `credit` | Refund or credit adjustment processed. |
+| `debit_adjustment` | `adjustment` | `debit` | Debit adjustment processed. |
 
 ## Webhook Payload Shape
 
 ```typescript
+type CardEventType = 
+  | 'purchase'
+  | 'rejected_insufficient_funds'
+  | 'rejected_credit'
+  | 'rejected_currency'
+  | 'credit_adjustment'
+  | 'debit_adjustment';
+
 interface WebhookPayload {
   /** URN of the card account */
   account_urn: string;
+
+  /** Unique transaction identifier */
+  transaction_id: string;
 
   /** Event classification */
   type: 'authorization' | 'adjustment';
@@ -60,56 +61,60 @@ interface WebhookPayload {
   /** Fund flow direction */
   direction: 'debit' | 'credit';
 
-  /** Purchase amount in the local currency */
-  local_amount: string;
+  /** Specific event type */
+  event: CardEventType;
 
-  /** Local currency code (e.g., "COP", "USD") */
-  local_currency: string;
-
-  /** Amount debited/credited in the ledger asset */
-  amount: string;
+  /** Amount debited/credited in the ledger asset (scaled BigInt string) */
+  amount?: string;
 
   /** Asset used for the debit/credit (e.g., "DUSD/6") */
-  asset: string;
+  asset?: string;
 
-  /** Exchange rate applied (if currency conversion occurred) */
-  exchange_rate?: string;
+  /** Purchase amount in the merchant's local currency */
+  local_amount?: number;
 
-  /** Transaction reference ID */
-  transaction_id: string;
+  /** ISO 4217 currency code (e.g., "USD", "COP") */
+  local_currency?: string;
+
+  /** Conversion rate applied (1 if direct match) */
+  exchange_rate?: number;
 
   /** Merchant information */
-  merchant: {
-    id: string;
+  merchant?: {
     name: string;
     mcc: string;          // Merchant Category Code
-    address?: string;
     city?: string;
     country?: string;
+    address?: string;
     terminal_id?: string;
   };
 
   /** Transaction medium details */
-  medium: {
-    entry_mode: string;           // e.g., "contactless", "chip", "manual"
-    point_type: string;           // e.g., "pos", "ecommerce"
-    origin: string;               // e.g., "domestic", "international"
-    network: string;              // e.g., "visa", "mastercard"
+  medium?: {
+    entry_mode: string;           // e.g., "CONTACTLESS", "CHIP", "CREDENTIAL_ON_FILE"
+    point_type: string;           // e.g., "POS", "ECOMMERCE"
+    origin: string;               // e.g., "DOMESTIC", "INTERNATIONAL"
+    network: string;              // e.g., "VISA", "MASTERCARD"
     cardholder_presence?: string;
     pin_presence?: string;
     tokenization_wallet_name?: string; // e.g., "apple_pay", "google_pay"
   };
 
-  /** Fee breakdown */
-  fee_breakdown: {
-    total: string;                // Total fees
-    settlement: string;           // Net settlement amount
+  /** Fee breakdown (present on successful transactions) */
+  fee_breakdown?: {
+    total_fees: string;          // Total fees as scaled BigInt string
     fees: Array<{
-      type: string;               // e.g., "interchange", "fx"
-      rate: string;               // e.g., "0.0144"
-      amount: string;             // Fee amount
+      fee_name: string;          // Fee identifier
+      amount: string;            // Fee amount as scaled BigInt string
+      rate: number;              // The rate or flat value used
     }>;
   };
+
+  /** Reason for rejection (present on rejection events) */
+  reason?: string;
+
+  /** Required USD amount (present on some rejection events) */
+  required_usd?: number;
 }
 ```
 
@@ -120,59 +125,18 @@ interface WebhookPayload {
 ```json
 {
   "account_urn": "did:bloque:account:card:usr-abc:crd-123",
-  "type": "authorization",
-  "direction": "debit",
   "transaction_id": "ctx-200kXoaEJLNzcsvNxY1pmBO7fEx",
-  "local_amount": "99.49",
-  "local_currency": "COP",
-  "amount": "9949",
-  "asset": "COPM/2",
-  "exchange_rate": "1",
-  "merchant": {
-    "id": "MID-001",
-    "name": "Exito Laureles",
-    "mcc": "5411",
-    "address": "Cra 70 #1-141",
-    "city": "Medellin",
-    "country": "COL",
-    "terminal_id": "TID-001"
-  },
-  "medium": {
-    "entry_mode": "CONTACTLESS",
-    "point_type": "POS",
-    "origin": "DOMESTIC",
-    "network": "MASTERCARD",
-    "cardholder_presence": "PRESENT",
-    "tokenization_wallet_name": "apple_pay"
-  },
-  "fee_breakdown": {
-    "total": "343",
-    "settlement": "9606",
-    "fees": [
-      { "fee_name": "interchange", "amount": "143", "rate": 0.0144 },
-      { "fee_name": "fx", "amount": "200", "rate": 0.02 }
-    ]
-  }
-}
-```
-
-### Purchase with Currency Conversion (USD transaction, DUSD balance)
-
-```json
-{
-  "account_urn": "did:bloque:account:card:usr-abc:crd-123",
   "type": "authorization",
   "direction": "debit",
-  "transaction_id": "ctx-500kUSDtx",
-  "local_amount": "25.00",
-  "local_currency": "USD",
-  "amount": "25000000",
+  "event": "purchase",
+  "amount": "50000000",
   "asset": "DUSD/6",
-  "exchange_rate": "1",
+  "local_amount": 50.0,
+  "local_currency": "USD",
+  "exchange_rate": 1,
   "merchant": {
-    "id": "MID-002",
-    "name": "Amazon.com",
-    "mcc": "5942",
+    "name": "AMAZON.COM",
+    "mcc": "5411",
     "city": "Seattle",
     "country": "USA"
   },
@@ -183,11 +147,9 @@ interface WebhookPayload {
     "network": "VISA"
   },
   "fee_breakdown": {
-    "total": "860000",
-    "settlement": "24140000",
+    "total_fees": "720000",
     "fees": [
-      { "fee_name": "interchange", "amount": "360000", "rate": 0.0144 },
-      { "fee_name": "fx", "amount": "500000", "rate": 0.02 }
+      { "fee_name": "interchange", "amount": "720000", "rate": 0.0144 }
     ]
   }
 }
@@ -198,67 +160,44 @@ interface WebhookPayload {
 ```json
 {
   "account_urn": "did:bloque:account:card:usr-abc:crd-123",
+  "transaction_id": "ctx-adj-456",
   "type": "adjustment",
   "direction": "credit",
-  "transaction_id": "ctx-300kRefundABC",
-  "original_transaction_id": "ctx-200kXoaEJLNzcsvNxY1pmBO7fEx",
-  "local_amount": "99.49",
-  "local_currency": "COP",
-  "amount": "9949",
-  "asset": "COPM/2",
-  "exchange_rate": "1",
+  "event": "credit_adjustment",
+  "amount": "25000000",
+  "asset": "DUSD/6",
+  "local_amount": 25.0,
+  "local_currency": "USD",
+  "exchange_rate": 1,
   "merchant": {
-    "id": "MID-001",
-    "name": "Exito Laureles",
+    "name": "AMAZON.COM",
     "mcc": "5411",
-    "city": "Medellin",
-    "country": "COL"
-  },
-  "medium": {
-    "entry_mode": "CONTACTLESS",
-    "point_type": "POS",
-    "origin": "DOMESTIC",
-    "network": "MASTERCARD"
+    "city": "Seattle",
+    "country": "USA"
   },
   "fee_breakdown": {
-    "total": "343",
-    "settlement": "9606",
+    "total_fees": "360000",
     "fees": [
-      { "fee_name": "interchange", "amount": "143", "rate": 0.0144 },
-      { "fee_name": "fx", "amount": "200", "rate": 0.02 }
+      { "fee_name": "interchange", "amount": "360000", "rate": 0.0144 }
     ]
   }
 }
 ```
 
+
 ### Purchase Rejected (Insufficient Funds)
 
-When a purchase is rejected, the webhook is still sent but with no `fee_breakdown` and the amount reflects what was attempted.
+When a purchase is rejected, the webhook is still sent but with no `fee_breakdown` (since no fees were charged) and the amount reflects what was attempted.
 
 ```json
 {
   "account_urn": "did:bloque:account:card:usr-abc:crd-123",
+  "transaction_id": "ctx-789",
   "type": "authorization",
   "direction": "debit",
-  "transaction_id": "ctx-400kRejected",
-  "status": "rejected_insufficient_funds",
-  "local_amount": "500.00",
-  "local_currency": "USD",
-  "amount": "0",
-  "asset": "DUSD/6",
-  "merchant": {
-    "id": "MID-003",
-    "name": "Best Buy",
-    "mcc": "5732",
-    "city": "Miami",
-    "country": "USA"
-  },
-  "medium": {
-    "entry_mode": "CHIP",
-    "point_type": "POS",
-    "origin": "INTERNATIONAL",
-    "network": "VISA"
-  }
+  "event": "rejected_insufficient_funds",
+  "required_usd": 150.0,
+  "reason": "Insufficient funds"
 }
 ```
 
@@ -268,29 +207,31 @@ When a purchase is rejected, the webhook is still sent but with no `fee_breakdow
 
 ```typescript
 app.post('/webhooks/card', async (req, res) => {
-  const event = req.body as WebhookPayload;
+  const payload = req.body as WebhookPayload;
 
-  switch (event.type) {
-    case 'authorization':
-      if (event.direction === 'debit') {
-        console.log(`Purchase: ${event.local_amount} ${event.local_currency}`);
-        console.log(`Merchant: ${event.merchant.name} (MCC ${event.merchant.mcc})`);
-        console.log(`Debited: ${event.amount} ${event.asset}`);
+  switch (payload.event) {
+    case 'purchase':
+      console.log(`Purchase: ${payload.local_amount} ${payload.local_currency}`);
+      console.log(`Merchant: ${payload.merchant?.name} (MCC ${payload.merchant?.mcc})`);
+      console.log(`Debited: ${payload.amount} ${payload.asset}`);
+      console.log(`Fees: ${payload.fee_breakdown?.total_fees}`);
 
-        await notifyUser(event.account_urn, {
-          type: 'purchase',
-          merchant: event.merchant.name,
-          amount: event.local_amount,
-          currency: event.local_currency,
-        });
-      }
+      await notifyUser(payload.account_urn, {
+        type: 'purchase',
+        merchant: payload.merchant?.name,
+        amount: payload.local_amount,
+        currency: payload.local_currency,
+      });
       break;
 
-    case 'adjustment':
-      if (event.direction === 'credit') {
-        console.log(`Refund: ${event.amount} ${event.asset}`);
-        await notifyUser(event.account_urn, { type: 'refund', amount: event.amount });
-      }
+    case 'credit_adjustment':
+      console.log(`Refund: ${payload.amount} ${payload.asset}`);
+      await notifyUser(payload.account_urn, { type: 'refund', amount: payload.amount });
+      break;
+
+    case 'rejected_insufficient_funds':
+      console.log(`Rejected: ${payload.reason}`);
+      console.log(`Required: ${payload.required_usd} USD`);
       break;
   }
 
@@ -315,55 +256,53 @@ app.post('/webhooks/card', async (req, res) => {
 
   // Log for audit
   console.log(JSON.stringify({
-    webhook: event.type,
-    direction: event.direction,
-    account: event.account_urn,
-    tx: event.transaction_id,
-    merchant: event.merchant?.name,
-    mcc: event.merchant?.mcc,
-    local: `${event.local_amount} ${event.local_currency}`,
-    debited: `${event.amount} ${event.asset}`,
-    entry: event.medium?.entry_mode,
-    wallet: event.medium?.tokenization_wallet_name || 'physical',
-    fees: event.fee_breakdown?.total,
-    net: event.fee_breakdown?.settlement,
+    webhook: payload.event,
+    type: payload.type,
+    direction: payload.direction,
+    account: payload.account_urn,
+    tx: payload.transaction_id,
+    merchant: payload.merchant?.name,
+    mcc: payload.merchant?.mcc,
+    local: `${payload.local_amount} ${payload.local_currency}`,
+    debited: `${payload.amount} ${payload.asset}`,
+    entry: payload.medium?.entry_mode,
+    wallet: payload.medium?.tokenization_wallet_name || 'physical',
+    fees: payload.fee_breakdown?.total_fees,
   }));
 
   // Route by event type
-  if (event.type === 'authorization' && event.direction === 'debit') {
+  if (payload.event === 'purchase') {
     // Purchase — update balance UI, send push notification
     await db.transactions.create({
-      accountUrn: event.account_urn,
-      transactionId: event.transaction_id,
-      merchantName: event.merchant.name,
-      merchantMcc: event.merchant.mcc,
-      localAmount: event.local_amount,
-      localCurrency: event.local_currency,
-      amount: event.amount,
-      asset: event.asset,
-      fees: event.fee_breakdown?.total,
-      settlement: event.fee_breakdown?.settlement,
-      entryMode: event.medium.entry_mode,
-      wallet: event.medium.tokenization_wallet_name,
+      accountUrn: payload.account_urn,
+      transactionId: payload.transaction_id,
+      merchantName: payload.merchant?.name,
+      merchantMcc: payload.merchant?.mcc,
+      localAmount: payload.local_amount,
+      localCurrency: payload.local_currency,
+      amount: payload.amount,
+      asset: payload.asset,
+      fees: payload.fee_breakdown?.total_fees,
+      entryMode: payload.medium?.entry_mode,
+      wallet: payload.medium?.tokenization_wallet_name,
     });
 
-    await pushNotification(event.account_urn, {
-      title: `Purchase at ${event.merchant.name}`,
-      body: `${event.local_amount} ${event.local_currency}`,
+    await pushNotification(payload.account_urn, {
+      title: `Purchase at ${payload.merchant?.name}`,
+      body: `${payload.local_amount} ${payload.local_currency}`,
     });
   }
 
-  if (event.type === 'adjustment' && event.direction === 'credit') {
+  if (payload.event === 'credit_adjustment') {
     // Refund — update original transaction, notify user
     await db.transactions.update({
-      originalTransactionId: event.original_transaction_id,
-      refundAmount: event.amount,
-      refundTransactionId: event.transaction_id,
+      transactionId: payload.transaction_id,
+      refundAmount: payload.amount,
     });
 
-    await pushNotification(event.account_urn, {
+    await pushNotification(payload.account_urn, {
       title: 'Refund received',
-      body: `${event.local_amount} ${event.local_currency} from ${event.merchant.name}`,
+      body: `${payload.local_amount} ${payload.local_currency} from ${payload.merchant?.name}`,
     });
   }
 
