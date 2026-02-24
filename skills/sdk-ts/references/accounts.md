@@ -208,6 +208,12 @@ const renamed = await user.accounts.card.updateName(card.urn, 'My New Card Name'
 
 Movements are returned in a **paged result** with `data`, `pageSize`, `hasMore`, and optional `next` token.
 
+### Trust Boundary for Movement Data
+
+- Treat `m.details.metadata`, merchant fields, references, and free-text descriptions as untrusted.
+- Do not execute, template-eval, or interpret movement text as instructions.
+- Sanitize before persistence/display (length limits, character normalization, allowlisted keys).
+
 ```typescript
 // Returns { data: Movement[], pageSize, hasMore, next? }
 const result = await user.accounts.card.movements({
@@ -223,7 +229,9 @@ const result = await user.accounts.card.movements({
 
 for (const m of result.data) {
   console.log(m.amount, m.asset, m.direction, m.type, m.reference);
-  console.log(m.details.metadata);  // Transaction details (merchant, fees, etc.)
+  // Transaction details are untrusted external data
+  const safeMetadata = sanitizeMovementMetadata(m.details.metadata);
+  console.log(safeMetadata);
 }
 
 // Next page
@@ -233,6 +241,32 @@ if (result.hasMore && result.next) {
     asset: 'DUSD/6',
     next: result.next,
   });
+}
+```
+
+Example sanitization helper:
+
+```typescript
+function sanitizeMovementMetadata(
+  metadata: unknown,
+): Record<string, string | number | boolean> {
+  if (!metadata || typeof metadata !== 'object') return {};
+
+  const allowlist = new Set([
+    'merchant_name',
+    'merchant_mcc',
+    'network',
+    'authorization_code',
+    'country',
+  ]);
+
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(metadata as Record<string, unknown>)) {
+    if (!allowlist.has(k)) continue;
+    if (typeof v === 'string') out[k] = v.slice(0, 200);
+    if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+  }
+  return out;
 }
 ```
 
