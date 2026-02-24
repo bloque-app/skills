@@ -32,3 +32,4 @@ Implementa integraciones de pago con los paquetes `@bloque/payments`, `@bloque/p
 
 - `references/quick-start.md`: Arranque rápido backend + frontend.
 - `references/api-reference.md`: Métodos, tipos y payloads principales.
+- `references/implementation-notes.md`: Diferencias detectadas entre README y código fuente, con guardrails de uso.
