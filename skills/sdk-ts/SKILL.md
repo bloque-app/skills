@@ -6,8 +6,9 @@ description: >
   Use when the user asks to "integrate Bloque", "create a card", "set up
   spending controls", "handle card webhooks", "transfer funds", "create
   pockets", "set up MCC routing", "share balances between any mediums",
-  "same balance across pockets/cards/Polygon/bank", or build any fintech feature on the
-  Bloque platform.
+  "same balance across pockets/cards/Polygon/bank", "set up cashback",
+  "auto-save on purchases", "round-up savings", "cashback programs",
+  or build any fintech feature on the Bloque platform.
 license: MIT
 metadata:
   author: bloque
@@ -59,7 +60,7 @@ Use this skill when:
 @bloque/sdk-swap     → Currency swap and bank transfers
 ```
 
-**Platforms**: Node.js, Bun, Deno (API key auth) | Browser, React Native (JWT auth)
+**Platforms**: Node.js, Bun, Deno (API key / origin key auth) | Browser, React Native (JWT auth)
 **Assets**: `DUSD/6`, `COPB/6`, `COPM/2`, `KSM/12`
 **Amounts**: Always strings to preserve precision. `"10000000"` = 10 DUSD (6 decimals).
 **Country codes**: Must be **3 letters** (ISO 3166-1 alpha-3), e.g. `USA`, `COL`, `GBR`. Do not use 2-letter codes.
@@ -83,33 +84,46 @@ Use this flow for frontend wallets similar to `/projects/wallet/src`:
 
 | Domain | Methods |
 |------|-------------|
-| Identity/Auth | `assert`, `connect`, `me`, `authenticate` |
+| Identity/Auth | `assert`, `register` (originKey), `connect` (apiKey/originKey), `me`, `authenticate` |
+| Identity Profile | `identity.updateMe`, `identity.myAliases`, `identity.get`, `identity.update`, `identity.getAliases` |
+| API Keys | `identity.apiKeys.create`, `identity.apiKeys.list`, `identity.apiKeys.get`, `identity.apiKeys.exchange`, `identity.apiKeys.revoke`, `identity.apiKeys.rotate` |
 | Accounts | `accounts.get`, `accounts.balance`, `accounts.balances`, `accounts.movements`, `accounts.transactions` |
-| Cards | `accounts.card.list`, `accounts.card.freeze`, `accounts.card.activate`, `accounts.card.updateName` |
+| Cards | `accounts.card.list`, `accounts.card.freeze`, `accounts.card.activate`, `accounts.card.update`, `accounts.card.updateName` |
+| Card Tokenization | `accounts.card.tokenizeApple`, `accounts.card.tokenizeGoogle` |
 | Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification` |
-| Swap/Top-up | `swap.findRates`, `swap.bankTransfer.create` |
+| Organizations | `orgs.create`, `orgs.get`, `orgs.list`, `orgs.verifySlug`, `orgs.delete`, `orgs.listMembers` |
+| Org Members | `orgs.members.update`, `orgs.members.remove` |
+| Org Teams | `orgs.teams.list`, `orgs.teams.update`, `orgs.teams.listMembers`, `orgs.teams.updateMember`, `orgs.teams.removeMember` |
+| Org Invites | `orgs.invites.create`, `orgs.invites.get`, `orgs.invites.list`, `orgs.invites.accept`, `orgs.invites.reject`, `orgs.invites.resend` |
+| Swap/Top-up | `swap.findRates`, `swap.listOrders`, `swap.bankTransfer.create` |
 
 ## Quick Start
 
 ```typescript
 import { SDK } from '@bloque/sdk';
 
+// --- Option A: API Key auth (sk_ secret key) — auto-exchange, no alias needed ---
 const bloque = new SDK({
-  origin: process.env.ORIGIN,
-  auth: { type: 'apiKey', apiKey: process.env.API_KEY },
+  auth: { type: 'apiKey', apiKey: process.env.SECRET_KEY },
   mode: 'sandbox',
 });
+const user = await bloque.connect(); // exchanges sk_ key for JWT, resolves identity via /me
 
-// Register a new user
-await bloque.register('@alice', {
+// --- Option B: Origin Key auth (legacy) — requires origin + alias ---
+const bloque2 = new SDK({
+  origin: process.env.ORIGIN,
+  auth: { type: 'originKey', originKey: process.env.ORIGIN_KEY },
+  mode: 'sandbox',
+});
+// Register a new user (originKey only)
+await bloque2.register('@alice', {
   type: 'individual',
   profile: { firstName: 'Alice', lastName: 'Smith', email: 'alice@example.com',
     phone: '+1234567890', birthdate: '1990-01-01', city: 'Miami', state: 'FL',
     postalCode: '33101', countryOfBirthCode: 'USA', countryOfResidenceCode: 'USA' },
 });
-
-// Connect to an existing user
-const user = await bloque.connect('@alice');
+// Connect to an existing user (originKey only)
+const session = await bloque2.connect('@alice');
 
 // Create a pocket and a card
 const pocket = await user.accounts.virtual.create({}, { waitLedger: true });
@@ -145,11 +159,12 @@ For deeper guidance, read these files in order of relevance to the task:
 2. **Spending Controls** — `"default"` (one pocket, all merchants) or `"smart"` (MCC-based multi-pocket routing). Configure via `metadata.spending_control`, `mcc_whitelist`, `priority_mcc`, `default_asset`, `fallback_asset`, `currency_asset_map`.
 3. **MCC Routing** — Map Merchant Category Codes to pockets. Priority order determines fallback. MCC whitelists can be inline arrays or URLs returning JSON arrays.
 4. **Fee Configuration** — Fees configured via `metadata.spending_fees` array. Merged by `fee_name` across three layers: defaults → origin metadata → card metadata. Each fee can be unconditional or gated by conditional **rules** (`fx_conversion`, `amount_range_usd`, `wallet`). Base fees cannot be removed, only overridden.
-5. **Webhooks** — Async events for card transactions (authorization, adjustment). Delivered to `webhookUrl`. Include `fee_breakdown` showing which fees were applied.
-6. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
-7. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
-8. **Movements are paged** — `user.accounts.movements()` and `user.accounts.card.movements()` return `{ data, pageSize, hasMore, next? }`. Use `result.data` for the list of movements; use `next` to fetch the next page when `hasMore` is true. Optional param `pocket`: `'main'` (confirmed) or `'pending'`.
-9. **Country codes** — Always **3 letters** (ISO 3166-1 alpha-3): e.g. `USA`, `COL`, `GBR`. Use for `countryOfBirthCode`, `countryOfResidenceCode`, and any other country fields. Do not use 2-letter codes (e.g. `US`, `CO`).
+5. **Cashback Programs** — Three automatic savings modes configured via `metadata.cashback_programs`: interchange share (via `spending_fees`), extra savings (percentage or flat surcharge), and round-up. Surcharges inflate the transaction total; fees are calculated on the original amount (`fee_basis`). A `cashback_surcharge` webhook event reports per-program breakdowns.
+6. **Webhooks** — Async events for card transactions (authorization, adjustment, cashback). Delivered to `webhookUrl`. Include `fee_breakdown` showing which fees were applied. Cashback surcharges are reported via a separate `cashback_surcharge` event.
+7. **Assets** — Format is `SYMBOL/DECIMALS`. Amounts are raw integer strings. `10 DUSD = "10000000"`.
+8. **Medium-specific accounts** — `user.accounts.get()` and `user.accounts.list()` return `MappedAccount` (union of `CardAccount`, `VirtualAccount`, `PolygonAccount`, `BancolombiaAccount`, `UsAccount`). Each medium has its own shape (e.g., `CardAccount` has `detailsUrl` for card details).
+9. **Movements are paged** — `user.accounts.movements()` and `user.accounts.card.movements()` return `{ data, pageSize, hasMore, next? }`. Use `result.data` for the list of movements; use `next` to fetch the next page when `hasMore` is true. Optional param `pocket`: `'main'` (confirmed) or `'pending'`.
+10. **Country codes** — Always **3 letters** (ISO 3166-1 alpha-3): e.g. `USA`, `COL`, `GBR`. Use for `countryOfBirthCode`, `countryOfResidenceCode`, and any other country fields. Do not use 2-letter codes (e.g. `US`, `CO`).
 
 ## Critical: Sharing Balances — Use the Same Ledger ID
 
@@ -175,12 +190,14 @@ const card = await user.accounts.card.create(
 // Any medium created with pocket.ledgerId shares the same balance.
 ```
 
-## Critical: Alias Consistency
+## Critical: Alias Consistency (originKey / jwt auth)
 
-**The alias used in `register()` and `connect()` MUST be identical.** If you register a user as `'@alice'`, you must connect with exactly `'@alice'` — not `'alice'`, `'@Alice'`, or any variation. A mismatch will throw a `BloqueNotFoundError` ("identity not found").
+These caveats apply to `originKey` and `jwt` auth only. With `apiKey` auth, `connect()` takes no alias and resolves identity automatically via `/me`.
+
+**The alias used in `register()` and `connect(alias)` MUST be identical.** If you register a user as `'@alice'`, you must connect with exactly `'@alice'` — not `'alice'`, `'@Alice'`, or any variation. A mismatch will throw a `BloqueNotFoundError` ("identity not found").
 
 ```typescript
-// Register
+// Register (originKey auth)
 await bloque.register('@alice', { type: 'individual', profile: { ... } });
 
 // Connect — MUST use the exact same alias
@@ -191,11 +208,13 @@ const user = await bloque.connect('@Alice');  // ❌ BloqueNotFoundError
 
 **Rule:** Pick one alias string and reuse it everywhere. Store it in a constant or environment variable.
 
-## Critical: `connect()` Always Succeeds
+## Critical: `connect(alias)` Always Succeeds (originKey / jwt auth)
 
-**`connect()` always returns a session — even if `register()` was never called for that alias.** It does NOT validate whether the identity exists. You will only discover the error later when you try to call account methods (e.g., `user.accounts.card.create()` will fail).
+This applies to `originKey` and `jwt` auth only. With `apiKey` auth, `connect()` resolves identity via `/me` and does not have this problem.
 
-The SDK does NOT provide a "user exists" check. **Your application must track whether a user has been registered before calling `connect()`.**
+**`connect(alias)` always returns a session — even if `register()` was never called for that alias.** It does NOT validate whether the identity exists. You will only discover the error later when you try to call account methods (e.g., `user.accounts.card.create()` will fail).
+
+The SDK does NOT provide a "user exists" check. **Your application must track whether a user has been registered before calling `connect(alias)`.**
 
 ```typescript
 // ❌ Wrong — no way to know if '@bob' was ever registered
@@ -213,7 +232,7 @@ if (!isRegistered) {
 const user = await bloque.connect('@bob');
 ```
 
-**Rule:** Never assume `connect()` validates the user. Always ensure `register()` has been called first, using your own application logic.
+**Rule:** Never assume `connect(alias)` validates the user. Always ensure `register()` has been called first, using your own application logic.
 
 ## Error Handling
 

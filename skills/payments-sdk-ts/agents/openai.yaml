@@ -1,4 +1,4 @@
 interface:
   display_name: "Bloque Payments SDK TS"
-  short_description: "Guia TS para checkout, pagos y webhooks en Bloque."
-  default_prompt: "Integra @bloque/payments, @bloque/payments-core y @bloque/payments-react con flujos de checkout, pago y verificacion de webhooks."
+  short_description: "TypeScript guide for checkout, payments, 3D Secure, and webhooks with Bloque."
+  default_prompt: "Integrate @bloque/payments, @bloque/payments-core, and @bloque/payments-react using the three-credential auth model (secretKey, publishableKey, clientSecret), 3D Secure card payments, status polling, and webhook verification."
