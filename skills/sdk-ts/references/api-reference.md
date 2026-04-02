@@ -10,10 +10,11 @@ Every SDK method, its parameters, and the exact shape of the returned object.
 
 ```typescript
 const bloque = new SDK({
-  origin: string;             // Required. Your origin identifier.
+  origin?: string;             // Required for originKey, optional for apiKey/jwt.
   auth:
-    | { type: 'apiKey'; apiKey: string }   // Backend
-    | { type: 'jwt' };                     // Frontend
+    | { type: 'apiKey'; apiKey: string; scopes?: string[] }  // Backend (sk_ keys, auto-exchange)
+    | { type: 'originKey'; originKey: string }                // Backend (legacy origins key)
+    | { type: 'jwt' };                                        // Frontend
   mode?: 'production' | 'sandbox';         // Default: 'production'
   platform?: 'node' | 'bun' | 'deno' | 'browser' | 'react-native'; // Auto-detected
   timeout?: number;            // Default: 30000 (ms)
@@ -29,7 +30,7 @@ const bloque = new SDK({
 
 ### `bloque.register(alias, params)` → Session
 
-Registers a new user identity and returns a connected session.
+Registers a new user identity and returns a connected session. **Only available for `originKey` auth.**
 
 ```typescript
 const session = await bloque.register('@alice', {
@@ -63,17 +64,34 @@ const session = await bloque.register('@alice', {
 }
 ```
 
-### `bloque.connect(alias)` → Session
+### `bloque.connect()` → Session (apiKey auth)
 
-Connects to an existing user. Returns the same `Session` shape as `register`.
+Exchanges the sk_ key for a JWT and resolves identity via `/me`. No alias needed.
+
+```typescript
+const user = await bloque.connect();  // apiKey auth: auto-exchange + /me
+const user = await bloque.connect({ scopes: ['accounts.read'] }); // with scope narrowing
+```
+
+### `bloque.connect(alias)` → Session (originKey auth)
+
+Connects to an existing user using the legacy API_KEY challenge. Returns the same `Session` shape as `register`.
 
 **Critical:**
 1. The `alias` must be **exactly** the same string used in `register()`. Any difference (missing `@`, different casing, extra spaces) will cause errors.
 2. **`connect()` always returns a session, even if the alias was never registered.** It does NOT validate identity existence. Errors surface later when calling account methods. Your app must track registration state before calling `connect()`.
 
 ```typescript
-const user = await bloque.connect('@alice');  // Always succeeds — no existence check
+const user = await bloque.connect('@alice');  // originKey auth: API_KEY challenge
 // user.urn, user.accounts, user.compliance, etc.
+```
+
+### `bloque.connect(origin, alias, code)` → Session (jwt auth)
+
+OTP-based connect for frontend flows. Unchanged.
+
+```typescript
+const user = await bloque.connect('my-origin', '@alice', '123456');
 ```
 
 ---
@@ -367,6 +385,20 @@ const result = await user.accounts.card.movements({
 
 The `details.metadata` in each movement contains card-specific fields like `merchant_name`, `merchant_mcc`, `fee_breakdown`, etc. See `transfers.md` for full metadata shapes. **Note:** `card.movements()` returns `data` in API (snake_case) format; `user.accounts.movements()` returns `data` in camelCase (e.g. `fromAccountId`, `createdAt`).
 
+### `user.accounts.card.update(params)` → `CardAccount`
+
+```typescript
+const updated = await user.accounts.card.update({
+  urn: string;
+  metadata?: Record<string, unknown>;
+  status?: string;
+  webhookUrl?: string;
+  ledgerId?: string;
+});
+```
+
+**Returns:** `CardAccount` (same shape as `create`).
+
 ### `user.accounts.card.updateMetadata(params)` → `CardAccount`
 
 ```typescript
@@ -385,6 +417,52 @@ const updated = await user.accounts.card.updateName(card.urn, 'New Name');
 ```
 
 **Returns:** `CardAccount` (same shape as `create`).
+
+### `user.accounts.card.tokenizeApple(urn, params)` → `TokenizeAppleResult`
+
+```typescript
+const result = await user.accounts.card.tokenizeApple(card.urn, {
+  nonce: string;
+  nonceSignature: string;
+  certificates: string[];
+});
+```
+
+**Returns:**
+
+```typescript
+{
+  activationData: string;
+  encryptedPassData: string;
+  wrappedKey: string;
+}
+```
+
+### `user.accounts.card.tokenizeGoogle(urn, params)` → `TokenizeGoogleResult`
+
+```typescript
+const result = await user.accounts.card.tokenizeGoogle(card.urn, {
+  deviceId: string;
+  deviceType: string;
+  provisioningAppVersion: string;
+  walletAccountId: string;
+});
+```
+
+**Returns:**
+
+```typescript
+{
+  opaquePaymentCard: string;
+  pushTokenizeRequestData: {
+    opaquePaymentCard: string;
+    displayName: string;
+    lastDigits: string;
+    network: number;
+    tokenServiceProvider: number;
+  };
+}
+```
 
 ### `user.accounts.card.activate(urn)` → `CardAccount`
 
@@ -711,6 +789,52 @@ const rates = await user.swap.findRates({
 }
 ```
 
+### `user.swap.listOrders(params?)` → `ListOrdersResult`
+
+```typescript
+const result = await user.swap.listOrders();
+// or with filters:
+const result = await user.swap.listOrders({ status: 'completed', limit: 20 });
+```
+
+**Params (all optional):**
+
+| Param | Type |
+|-------|------|
+| `status` | `string` |
+| `limit` | `number` |
+| `offset` | `number` |
+
+**Returns:**
+
+```typescript
+{
+  orders: Array<{
+    id: string;
+    orderSig: string;
+    rateSig: string;
+    swapSig: string;
+    taker: string;
+    maker: string;
+    fromAsset: string;
+    toAsset: string;
+    fromMedium: string;
+    toMedium: string;
+    fromAmount: string;
+    toAmount: string;
+    at: number;
+    graphId: string;
+    status: string;
+    webhookUrl?: string;
+    failureReason?: string;     // Present when status is 'failed'
+    failureDetails?: string;    // Detailed failure information
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+  }>
+}
+```
+
 ---
 
 ## PseClient (`user.swap.pse`)
@@ -890,6 +1014,164 @@ const org = await user.orgs.create({
   metadata?: Record<string, unknown>;
   status: 'awaiting_compliance_verification' | 'active' | 'suspended' | 'closed';
 }
+```
+
+### `user.orgs.get(orgUrn)` → `Organization`
+
+```typescript
+const org = await user.orgs.get('bloque:org:abc123');
+```
+
+### `user.orgs.list()` → `Organization[]`
+
+```typescript
+const orgs = await user.orgs.list();
+```
+
+### `user.orgs.verifySlug(slug)` → `VerifySlugResult`
+
+```typescript
+const result = await user.orgs.verifySlug('acme-corp');
+// { available: boolean; slug: string }
+```
+
+### `user.orgs.delete(orgUrn)` → `void`
+
+```typescript
+await user.orgs.delete('bloque:org:abc123');
+```
+
+### `user.orgs.listMembers(orgUrn)` → `Member[]`
+
+```typescript
+const members = await user.orgs.listMembers('bloque:org:abc123');
+```
+
+### `user.orgs.members.update(memberUrn, params)` → `Member`
+
+```typescript
+const member = await user.orgs.members.update('bloque:member:m1', { role: 'admin' });
+```
+
+### `user.orgs.members.remove(orgUrn, memberUrn)` → `void`
+
+```typescript
+await user.orgs.members.remove('bloque:org:abc123', 'bloque:member:m1');
+```
+
+### `user.orgs.teams.list(orgUrn)` → `Team[]`
+
+```typescript
+const teams = await user.orgs.teams.list('bloque:org:abc123');
+```
+
+### `user.orgs.teams.update(teamUrn, params)` → `Team`
+
+### `user.orgs.teams.listMembers(teamUrn)` → `TeamMember[]`
+
+### `user.orgs.teams.updateMember(teamUrn, memberUrn, params)` → `TeamMember`
+
+### `user.orgs.teams.removeMember(teamUrn, memberUrn)` → `void`
+
+### `user.orgs.invites.create(orgUrn, params)` → `Invite`
+
+```typescript
+const invite = await user.orgs.invites.create('bloque:org:abc123', {
+  email: 'new@example.com',
+  role: 'member',
+});
+```
+
+### `user.orgs.invites.get(code)` → `Invite`
+
+### `user.orgs.invites.list(params?)` → `Invite[]`
+
+### `user.orgs.invites.accept(code)` → `void`
+
+### `user.orgs.invites.reject(code, reason?)` → `void`
+
+### `user.orgs.invites.resend(code)` → `void`
+
+---
+
+## IdentityClient (`user.identity`)
+
+### `user.identity.updateMe(params)` → `IdentityMe`
+
+```typescript
+const me = await user.identity.updateMe({
+  firstName: 'Alice',
+  lastName: 'Smith',
+});
+```
+
+### `user.identity.myAliases()` → `IdentityAlias[]`
+
+```typescript
+const aliases = await user.identity.myAliases();
+```
+
+### `user.identity.get(urn)` → `IdentityMe`
+
+```typescript
+const identity = await user.identity.get('bloque:user:123');
+```
+
+### `user.identity.update(urn, params)` → `IdentityMe`
+
+### `user.identity.getAliases(urn)` → `IdentityAlias[]`
+
+### `user.identity.apiKeys.create(params)` → `CreateApiKeyResult`
+
+```typescript
+const result = await user.identity.apiKeys.create({
+  name: string;
+  scopes: string[];
+  domains: string[];
+  expiration: string;  // 'never' or seconds as string
+  metadata?: Record<string, unknown>;
+});
+// → { keyId: string; secretKey: string; publishableKey: string }
+// secretKey is shown only once — store securely
+```
+
+### `user.identity.apiKeys.list()` → `ApiKeyInfo[]`
+
+```typescript
+const keys = await user.identity.apiKeys.list();
+// → Array<{ id, keyId, publishableKey, name, scopes, domains, status, expiration, metadata, lastUsedAt?, createdAt }>
+// status: 'active' | 'revoked' | 'expired'
+```
+
+### `user.identity.apiKeys.get(id)` → `ApiKeyInfo`
+
+```typescript
+const key = await user.identity.apiKeys.get('uuid-here');
+```
+
+### `user.identity.apiKeys.exchange(params)` → `ExchangeApiKeyResult`
+
+Exchange an sk_ key for a short-lived JWT (15-min TTL). Unauthenticated, rate-limited.
+
+```typescript
+const result = await user.identity.apiKeys.exchange({
+  key: 'sk_live_...',
+  scopes?: string[];
+});
+// → { accessToken: string; expiresIn: number; tokenType: string }
+```
+
+### `user.identity.apiKeys.revoke(id)` → `void`
+
+```typescript
+await user.identity.apiKeys.revoke('uuid-here');
+```
+
+### `user.identity.apiKeys.rotate(id)` → `RotateApiKeyResult`
+
+```typescript
+const result = await user.identity.apiKeys.rotate('uuid-here');
+// → { secretKey: string } — new key, shown only once
 ```
 
 ---

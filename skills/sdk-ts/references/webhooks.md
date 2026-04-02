@@ -43,6 +43,7 @@ await user.accounts.batchTransfer({
 | `rejected_currency` | `authorization` | `debit` | Purchase rejected — unsupported currency. |
 | `credit_adjustment` | `adjustment` | `credit` | Refund or credit adjustment processed. |
 | `debit_adjustment` | `adjustment` | `debit` | Debit adjustment processed. |
+| `cashback_surcharge` | `authorization` | `debit` | Cashback surcharge applied. Sent alongside `purchase` when `cashback_programs` are configured. |
 
 ## Webhook Payload Shape
 
@@ -53,7 +54,8 @@ type CardEventType =
   | 'rejected_credit'
   | 'rejected_currency'
   | 'credit_adjustment'
-  | 'debit_adjustment';
+  | 'debit_adjustment'
+  | 'cashback_surcharge';
 
 interface WebhookPayload {
   /** URN of the card account */
@@ -122,6 +124,16 @@ interface WebhookPayload {
 
   /** Required USD amount (present on some rejection events) */
   required_usd?: number;
+
+  /** Total surcharge in local currency (cashback_surcharge events only) */
+  surcharge_total?: number;
+
+  /** Per-program breakdown (cashback_surcharge events only) */
+  programs?: Array<{
+    name: string;      // Program name
+    type: string;      // 'extra_savings' | 'round_up'
+    amount: number;    // Surcharge amount in local currency
+  }>;
 }
 ```
 
@@ -192,6 +204,27 @@ interface WebhookPayload {
 ```
 
 
+### Cashback Surcharge (Authorization Debit)
+
+Sent alongside the `purchase` event when `cashback_programs` are configured. Reports the total surcharge and per-program breakdown in the merchant's local currency.
+
+```json
+{
+  "account_urn": "did:bloque:account:card:usr-abc:crd-123",
+  "transaction_id": "ctx-200kXoaEJLNzcsvNxY1pmBO7fEx",
+  "type": "authorization",
+  "direction": "debit",
+  "event": "cashback_surcharge",
+  "surcharge_total": 1.341,
+  "programs": [
+    { "name": "auto_save", "type": "extra_savings", "amount": 1.041 },
+    { "name": "spare_change", "type": "round_up", "amount": 0.30 }
+  ]
+}
+```
+
+The `surcharge_total` and per-program `amount` values are in the merchant's local currency. These surcharges do **not** appear in `fee_breakdown` — they are reported exclusively through this event.
+
 ### Purchase Rejected (Insufficient Funds)
 
 When a purchase is rejected, the webhook is still sent but with no `fee_breakdown` (since no fees were charged) and the amount reflects what was attempted.
@@ -229,6 +262,13 @@ app.post('/webhooks/card', async (req, res) => {
         amount: payload.local_amount,
         currency: payload.local_currency,
       });
+      break;
+
+    case 'cashback_surcharge':
+      console.log(`Cashback: ${payload.surcharge_total} saved`);
+      for (const p of payload.programs ?? []) {
+        console.log(`  ${p.name} (${p.type}): ${p.amount}`);
+      }
       break;
 
     case 'credit_adjustment':
@@ -380,6 +420,13 @@ Understanding the full lifecycle of a card transaction:
                     │  Control (default/smart)│
                     └───────────┬────────────┘
                                 │
+                    ┌───────────▼────────────┐
+                    │  CashbackDecorator?     │
+                    │  (if cashback_programs) │
+                    │  • Inflate amount       │
+                    │  • Set fee_basis        │
+                    └───────────┬────────────┘
+                                │
               ┌─────────────────▼──────────────────┐
               │                                     │
      ┌────────▼────────┐              ┌─────────────▼─────────┐
@@ -399,8 +446,9 @@ Understanding the full lifecycle of a card transaction:
                              │
                ┌─────────────▼──────────────┐
                │  Fire Events               │
-               │  • Webhook (async)         │
-               │  • WhatsApp notification   │
+               │  • Webhook: purchase        │
+               │  • Webhook: cashback_surcharge │
+               │  • WhatsApp notification    │
                └─────────────┬──────────────┘
                              │
                     ┌────────▼────────┐

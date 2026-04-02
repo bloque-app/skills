@@ -291,6 +291,202 @@ interface FeeBreakdown {
 }
 ```
 
+## Cashback Programs
+
+Three approaches to automatic savings on card transactions. All modes work with both `default` and `smart` spending controls.
+
+### Mode 1: Interchange Share (via spending_fees)
+
+Route a portion of interchange revenue to a user's savings pocket. Uses the existing `spending_fees` system — point `account_urn` to the user's pocket instead of a treasury account.
+
+```typescript
+const savingsPocket = await user.accounts.virtual.create(
+  { name: 'Savings' },
+  { waitLedger: true },
+);
+
+const card = await user.accounts.card.create(
+  {
+    name: 'Cashback Card',
+    ledgerId: mainPocket.ledgerId,
+    metadata: {
+      spending_control: 'default',
+      default_asset: 'DUSD/6',
+      spending_fees: [
+        {
+          fee_name: 'interchange_share',
+          account_urn: savingsPocket.urn,
+          type: 'percentage',
+          value: 0.002,           // 0.2% of every purchase
+          category: 'custom',
+        },
+      ],
+    },
+  },
+  { waitLedger: true },
+);
+```
+
+No `cashback_programs` metadata needed — interchange share works purely through fee routing.
+
+### Mode 2: Extra Savings
+
+Charge an extra percentage or flat amount per transaction and send it to a savings pocket. Configured via `metadata.cashback_programs`.
+
+```typescript
+// Percentage-based: 5% of every purchase goes to savings
+const card = await user.accounts.card.create(
+  {
+    name: 'Auto-Save Card',
+    ledgerId: mainPocket.ledgerId,
+    metadata: {
+      spending_control: 'default',
+      default_asset: 'DUSD/6',
+      cashback_programs: [
+        {
+          program_name: 'savings_5pct',
+          type: 'extra_savings',
+          target_pocket_urn: savingsPocket.urn,
+          fee_type: 'percentage',
+          value: 0.05,            // 5% surcharge
+        },
+      ],
+    },
+  },
+  { waitLedger: true },
+);
+```
+
+```typescript
+// Flat-based: $1 per transaction goes to savings
+cashback_programs: [
+  {
+    program_name: 'savings_flat',
+    type: 'extra_savings',
+    target_pocket_urn: savingsPocket.urn,
+    fee_type: 'flat',
+    value: 1.0,                   // $1 per transaction
+  },
+]
+```
+
+### Mode 3: Round Up
+
+Round every purchase up to the next whole unit. The delta goes to a savings pocket.
+
+A $34.70 purchase becomes $35.00 — the extra $0.30 is routed to the target pocket.
+
+```typescript
+cashback_programs: [
+  {
+    program_name: 'round_up',
+    type: 'round_up',
+    target_pocket_urn: savingsPocket.urn,
+  },
+]
+```
+
+### Combined Example
+
+Stack multiple programs on the same card:
+
+```typescript
+cashback_programs: [
+  {
+    program_name: 'auto_save',
+    type: 'extra_savings',
+    target_pocket_urn: savingsPocket.urn,
+    fee_type: 'percentage',
+    value: 0.03,              // 3% surcharge → savings
+  },
+  {
+    program_name: 'spare_change',
+    type: 'round_up',
+    target_pocket_urn: roundUpPocket.urn, // Can target a different pocket
+  },
+]
+```
+
+### CashbackProgram Type
+
+```typescript
+type CashbackProgramType = 'extra_savings' | 'round_up';
+type CashbackFeeType = 'percentage' | 'flat';
+
+interface CashbackProgram {
+  program_name: string;            // Unique identifier for this program
+  type: CashbackProgramType;
+  target_pocket_urn: string;       // Pocket URN where savings are routed
+  fee_type?: CashbackFeeType;     // Required for extra_savings, ignored for round_up
+  value?: number;                  // Rate (0.05 = 5%) or fixed amount in local currency
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `program_name` | `string` | Yes | Unique name for the program |
+| `type` | `'extra_savings' \| 'round_up'` | Yes | Savings mode |
+| `target_pocket_urn` | `string` | Yes | Pocket URN receiving the surcharge |
+| `fee_type` | `'percentage' \| 'flat'` | extra_savings only | How to compute the surcharge |
+| `value` | `number` | extra_savings only | Rate (0.05 = 5%) for percentage, or fixed local-currency amount for flat |
+
+### How It Works
+
+```
+ Purchase $34.70
+     │
+     ▼
+ CashbackDecorator
+     │
+     ├─ Calculate surcharges:
+     │    extra_savings (3%): $1.041
+     │    round_up:           $0.30
+     │    total surcharge:    $1.341
+     │
+     ├─ Inflate request: $34.70 → $36.041
+     │   (balance check covers original + surcharges)
+     │
+     ├─ Set fee_basis = $34.70
+     │   (interchange/fx fees calculated on original amount)
+     │
+     ├─ Delegate to base control (default or smart)
+     │    → debit card $36.041
+     │    → calculate interchange on $34.70 (fee_basis)
+     │
+     ├─ Append surcharge movements:
+     │    Pomelo treasury → savings pocket:   $1.041
+     │    Pomelo treasury → round-up pocket:  $0.30
+     │
+     └─ Push cashback_surcharge webhook event
+```
+
+Interchange, FX, and other `spending_fees` are always computed on the **original** transaction amount (`fee_basis`), not the inflated total.
+
+### Cashback Webhook Event
+
+When cashback is active, a `cashback_surcharge` event is delivered alongside the standard `purchase` event:
+
+```json
+{
+  "account_urn": "did:bloque:account:card:usr-abc:crd-123",
+  "transaction_id": "ctx-200kXoaEJLNzcsvNxY1pmBO7fEx",
+  "type": "authorization",
+  "direction": "debit",
+  "event": "cashback_surcharge",
+  "surcharge_total": 1.341,
+  "programs": [
+    { "name": "auto_save", "type": "extra_savings", "amount": 1.041 },
+    { "name": "spare_change", "type": "round_up", "amount": 0.30 }
+  ]
+}
+```
+
+The `surcharge_total` and per-program `amount` values are in the merchant's local currency. Cashback surcharges do **not** appear in `fee_breakdown` — they are reported via this separate event.
+
+### Refunds with Cashback
+
+On credit adjustments (refunds), surcharges are reversed **proportionally** back from the savings pockets. A 50% refund returns 50% of each program's surcharge. No separate webhook event is sent for cashback reversals — they are included in the standard `credit_adjustment` flow.
+
 ## MCC Code Reference
 
 | Category | MCCs | Description |
@@ -325,6 +521,7 @@ interface FeeBreakdown {
 | `mcc_whitelist` | `Record<pocketUrn, string[] \| string>` | Smart only | Pocket URN → array of MCC codes, or URL returning a JSON array. |
 | `priority_mcc` | `string[]` | Smart only | Ordered list of pocket URNs. Checked top-to-bottom. |
 | `spending_fees` | `SpendingFee[]` | No | Fee overrides/additions for this card. Merged with origin/default by `fee_name`. See Fee Configuration. |
+| `cashback_programs` | `CashbackProgram[]` | No | Cashback/auto-save programs. Each entry defines a surcharge routed to a savings pocket. See Cashback Programs. |
 
 ## Processing Details
 

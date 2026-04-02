@@ -13,11 +13,11 @@ bun add @bloque/sdk
 ```typescript
 import { SDK } from '@bloque/sdk';
 
+// API Key auth (sk_ secret key) — preferred for new integrations
 const bloque = new SDK({
-  origin: process.env.ORIGIN,       // Your origin identifier
   auth: {
-    type: 'apiKey',                  // Backend: 'apiKey' | Frontend: 'jwt'
-    apiKey: process.env.API_KEY,
+    type: 'apiKey',                  // Backend: 'apiKey' | 'originKey' | Frontend: 'jwt'
+    apiKey: process.env.SECRET_KEY,  // sk_live_... or sk_test_...
   },
   mode: 'sandbox',                   // 'production' | 'sandbox'
   // platform: 'node',               // Auto-detected. Options: node | bun | deno | browser | react-native
@@ -28,14 +28,25 @@ const bloque = new SDK({
 
 ### Backend (Node.js / Bun / Deno)
 
-Use API key authentication. The SDK sends the key in request headers.
+**Option A: API Key auth (recommended).** Uses sk_ secret keys with auto-exchange for short-lived JWTs.
+
+```typescript
+const bloque = new SDK({
+  auth: { type: 'apiKey', apiKey: process.env.SECRET_KEY },
+  mode: 'sandbox',
+});
+const user = await bloque.connect(); // no alias needed
+```
+
+**Option B: Origin Key auth (legacy).** Uses origin-scoped keys with the API_KEY challenge.
 
 ```typescript
 const bloque = new SDK({
   origin: process.env.ORIGIN,
-  auth: { type: 'apiKey', apiKey: process.env.API_KEY },
+  auth: { type: 'originKey', originKey: process.env.ORIGIN_KEY },
   mode: 'sandbox',
 });
+const user = await bloque.connect('@alice'); // alias required
 ```
 
 ### Frontend (Browser / React Native)
@@ -115,8 +126,9 @@ console.log('Connected:', user.urn);
 ## Environment Variables
 
 ```bash
-ORIGIN=your-origin-id        # Your Bloque origin identifier
-API_KEY=your-api-key         # Backend API key (never expose to frontend)
+SECRET_KEY=sk_test_...       # For apiKey auth — sk_ secret key (never expose to frontend)
+ORIGIN_KEY=your-origin-key   # For originKey auth — legacy origin-scoped key
+ORIGIN=your-origin-id        # Required for originKey auth, optional for apiKey
 MODE=sandbox                 # production | sandbox
 ```
 
