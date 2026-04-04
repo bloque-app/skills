@@ -26,11 +26,12 @@ type BloqueConfigLegacy = {
 ### `bloque.checkout`
 
 - `create(params: CheckoutParams): Promise<Checkout>`
-- `retrieve(checkoutId: string): Promise<Checkout>`
-- `cancel(checkoutId: string): Promise<Checkout>`
+- `retrieve(checkoutId: string): Promise<Checkout>` — maps to `GET /link/:url_id`
+- `cancel(paymentUrn: string): Promise<Checkout>` — maps to `PATCH /:payment_urn/status`
+- `list(params?: ListCheckoutParams): Promise<Checkout[]>` — maps to `GET /`
 
 ```ts
-type ASSETS = 'DUSD/6' | 'COPM/2';
+type ASSETS = 'DUSD/6' | 'COPM/2' | 'COP/2' | 'USD/6';
 
 type CheckoutParams = {
   name: string;
@@ -46,11 +47,14 @@ type CheckoutParams = {
   }[];
   success_url: string;
   cancel_url: string;
-  metadata?: Record<string, string | number | boolean>;
+  webhook_url?: string;
+  metadata?: Record<string, unknown>;
   expires_at?: string;
   payment_methods?: ('card' | 'pse' | 'cash')[];
   payout_route?: PayoutRoute[];
 };
+
+type CheckoutStatus = 'pending' | 'paid' | 'expired' | 'deposited' | 'cancelled';
 
 type Checkout = {
   id: string;
@@ -58,24 +62,37 @@ type Checkout = {
   object: 'checkout';
   url: string;
   client_secret?: string;    // checkout-scoped JWT for browser-side auth
-  status: 'pending' | 'completed' | 'expired' | 'canceled';
+  status: CheckoutStatus;
   amount_total: number;
   amount_subtotal: number;
   asset: ASSETS;
   items: CheckoutItem[];
-  metadata?: Record<string, string | number | boolean>;
+  metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   expires_at: string | null;
+};
+
+type ListCheckoutParams = {
+  status?: CheckoutStatus;
+  payment_type?: 'shopping_cart' | 'subscription';
+  payeer_search?: string;
+  from_date?: string;
+  to_date?: string;
+  limit?: number;
+  offset?: number;
+  order?: 'asc' | 'desc';
 };
 ```
 
 ### `bloque.payments`
 
-- `create(params: CreatePaymentParams): Promise<PaymentResponse>`
-- `getStatus(paymentId: string): Promise<PaymentResponse>`
+- `create(params: CreatePaymentParams): Promise<PaymentResponse>` — maps to `POST /:type`
+- `getStatus(paymentId: string): Promise<PaymentResponse>` — maps to `GET /:payment_urn`
 
 ```ts
+type PaymentMethodType = 'card' | 'pse' | 'cash';
+
 type BrowserInfo = {
   browser_color_depth: string;
   browser_screen_height: string;
@@ -97,15 +114,34 @@ type CardPaymentFormData = {
   three_ds_auth_type?: string;          // sandbox only
 };
 
-type PaymentSubmitPayload = {
-  type: 'card';
-  data: CardPaymentFormData;
+type PsePaymentFormData = {
+  email: string;
+  personType: 'natural' | 'juridica';
+  documentType: string;
+  documentNumber: string;
+  bankCode: string;
 };
 
-type CreatePaymentParams = {
-  checkoutId?: string;
-  payment: PaymentSubmitPayload;
+type CashPaymentFormData = {
+  email: string;
+  documentType: string;
+  documentNumber: string;
+  fullName: string;
 };
+
+type PaymentSubmitPayload =
+  | { type: 'card'; data: CardPaymentFormData }
+  | { type: 'pse';  data: PsePaymentFormData }
+  | { type: 'cash'; data: CashPaymentFormData };
+
+type CreatePaymentParams = {
+  paymentUrn: string;          // did:bloque:payments:... (maps to payment_urn in body)
+  payment: PaymentSubmitPayload;
+  /** @deprecated Use paymentUrn instead */
+  checkoutId?: string;
+};
+
+type DirectPaymentStatus = 'approved' | 'rejected' | 'pending';
 
 type ThreeDSData = {
   current_step: string;
@@ -113,14 +149,19 @@ type ThreeDSData = {
 };
 
 type PaymentResponse = {
-  id: string;
+  id: string;                           // payment URN (payment_id on the wire)
   object: 'payment';
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: DirectPaymentStatus;
+  message: string;
   amount: number;
   currency: string;
-  created_at: string;
-  updated_at: string;
+  reference?: string;
+  checkout_url?: string;                // PSE redirect URL
+  payment_code?: string;               // cash payment code
+  order_id?: string;
+  order_status?: string;
   three_ds?: ThreeDSData;
+  created_at: string;
 };
 ```
 
@@ -166,6 +207,8 @@ type BloqueInitOptions = {
 ### `new BloqueCheckout(options)` / `createCheckout({ ...options, container })`
 
 ```ts
+type PaymentMethod = 'card' | 'pse' | 'cash';
+
 type BloqueCheckoutOptions = {
   checkoutId: string;
   clientSecret?: string;       // checkout JWT from bloque.checkout.create()
@@ -175,7 +218,7 @@ type BloqueCheckoutOptions = {
   checkoutUrl?: string;
   appearance?: AppearanceConfig;
   showInstallments?: boolean;
-  paymentMethods?: ('card' | 'pse')[];
+  paymentMethods?: PaymentMethod[];
   iframeStyles?: Record<string, string>;
   three_ds_auth_type?: string;          // sandbox only
   onReady?: () => void;
@@ -220,7 +263,7 @@ type BloqueCheckoutProps = {
   checkoutUrl?: string;
   appearance?: AppearanceConfig;
   showInstallments?: boolean;
-  paymentMethods?: ('card' | 'pse')[];
+  paymentMethods?: PaymentMethod[];
   iframeStyles?: Record<string, string>;
   threeDsAuthType?: string;              // camelCase (React convention)
   onReady?: () => void;
@@ -233,4 +276,4 @@ type BloqueCheckoutProps = {
 };
 ```
 
-Re-exports from `@bloque/payments-core`: `init`, `BloqueCheckoutCore`, `AppearanceConfig`, `PaymentResult`.
+Re-exports from `@bloque/payments-core`: `init`, `BloqueCheckoutCore`, `AppearanceConfig`, `PaymentResult`, `PaymentMethod`, `ThreeDSChallengeData`.

@@ -28,7 +28,7 @@ Kotlin/Java SDK for programmable financial infrastructure: identity, accounts, c
   - any operation that changes balances, limits, or routing rules
 - Use allowlists and schema validation before business logic. Reject unknown event types and malformed fields.
 - Log and persist only sanitized fields needed for operations/audit.
-- **Never commit real API keys.** Use placeholders in examples (`sk_test_your_api_key_here`, `{your-api-key-here}`).
+- **Never commit real API keys.** Use placeholders in examples (`sk_test_your_secret_key_here`, `{your-origin-key-here}`).
 
 ## When to Apply
 
@@ -64,20 +64,35 @@ sdk-swap                → Swap rates, bank transfer, Colombian bank (colbank)
 
 ## Quick Start
 
+**Option A — API Key auth (recommended):** Uses sk_ secret keys with auto-exchange for JWT.
+
 ```kotlin
 import app.bloque.sdk.BloqueSDK
 import app.bloque.sdk.core.Mode
 
 val bloque = BloqueSDK.builder()
-    .origin("my-origin")
-    .apiKey(System.getenv("BLOQUE_API_KEY") ?: "sk_test_your_api_key_here")
+    .secretKey(System.getenv("SECRET_KEY") ?: "sk_test_...")
     .mode(Mode.SANDBOX)
     .build()
 
-// Connect to an existing user
-val session = bloque.connect("@alice")
+val session = bloque.connect()  // no alias needed — identity resolved via /me
+```
 
-// Create a pocket and a card
+**Option B — Origin Key auth (legacy):** Origin-scoped keys requiring alias.
+
+```kotlin
+val bloque = BloqueSDK.builder()
+    .origin("my-origin")
+    .originKey(System.getenv("ORIGIN_KEY") ?: "your-origin-key")
+    .mode(Mode.SANDBOX)
+    .build()
+
+val session = bloque.connect("@alice")
+```
+
+After connecting:
+
+```kotlin
 val pocket = session.accounts.virtual.create(
     CreateVirtualAccountParams(),
     CreateAccountConfig(waitLedger = true)
@@ -92,7 +107,7 @@ val card = session.accounts.card.create(
 
 | Domain | Methods |
 |--------|---------|
-| Identity/Auth | `register`, `connect` |
+| Identity/Auth | `register (originKey)`, `connect (apiKey/originKey)`, `identity.me()`, `identity.apiKeys.create, list, get, exchange, revoke, rotate` |
 | Accounts | `accounts.get`, `accounts.balance`, `accounts.balances`, `accounts.movements`, `accounts.transfer` |
 | Virtual | `accounts.virtual.create` |
 | Polygon | `accounts.polygon.create` |
@@ -124,9 +139,9 @@ val card = session.accounts.card.create(
 )
 ```
 
-## Critical: Alias Consistency
+## Critical: Alias Consistency (originKey auth only)
 
-The alias used in `register()` and `connect()` MUST be identical. Store it in a constant or config.
+When using `originKey` auth, the alias used in `register()` and `connect(alias)` MUST be identical. Store it in a constant or config. This does not apply to `apiKey` auth, where identity is resolved via `/me`.
 
 ## Error Handling
 
