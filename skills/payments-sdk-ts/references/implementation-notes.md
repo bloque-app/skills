@@ -34,6 +34,7 @@ The SDK builds URLs relative to `baseURL` (`{apiRoot}/payments`). The server rou
 | SDK method | SDK path (relative) | Server route |
 |---|---|---|
 | `checkout.create()` | `POST /` | `POST /api/payments` |
+| `checkout.retrievePublic(id)` | `GET /by-link/${id}` | `GET /api/payments/by-link/:url_id` (public) |
 | `checkout.retrieve(id)` | `GET /link/${id}` | `GET /api/payments/link/:url_id` |
 | `checkout.cancel(urn)` | `PATCH /${urn}/status` | `PATCH /api/payments/:payment_urn/status` |
 | `checkout.list(params)` | `GET /` + query | `GET /api/payments` |
@@ -67,13 +68,33 @@ The deprecated `checkoutId` field is still accepted as a fallback.
 
 All three payment types are supported with distinct form data shapes:
 
-| Type | Form data interface | Type-specific response fields |
-|---|---|---|
-| `card` | `CardPaymentFormData` (includes 3DS fields) | `three_ds?` |
-| `pse` | `PsePaymentFormData` (person type, bank code) | `checkout_url` (redirect URL) |
-| `cash` | `CashPaymentFormData` (full name, document) | `payment_code` (10-digit code) |
+| Type | Form data interface | Required fields | Type-specific response fields |
+|---|---|---|---|
+| `card` | `CardPaymentFormData` | `cardNumber`, `cardholderName`, `expiryMonth`, `expiryYear`, `cvv`, `email`, `installments`, `currency` + 3DS fields | `three_ds?` |
+| `pse` | `PsePaymentFormData` | `email`, `personType`, `documentType`, `documentNumber`, `bankCode`, `name`, `phone` | `checkout_url` (redirect URL) |
+| `cash` | `CashPaymentFormData` | `email`, `documentType`, `documentNumber`, `fullName` | `payment_code` (10-digit code) |
 
 The `PaymentResource` builds the correct server payload for each type, mapping camelCase SDK fields to snake_case server fields.
+
+### Card: `installments` and `currency`
+
+Card payments require `installments` (number, use `1` for single payment) and `currency` (string, e.g. `'COP'`, `'USD'`). The server uses `currency` to determine the source asset for the swap rate. Omitting these fields causes server-side validation failure.
+
+### Payee forwarding
+
+All payment types build a `payee` object in the wire payload. The SDK exposes optional fields (`phone`, `webhookUrl`) on each form data interface. When present, they are forwarded to the server:
+
+- **Card**: `payee.phone` maps to `customer_data.phone_number` in the swap args.
+- **PSE**: `name` and `phone` are required fields. They map to `customer_data.full_name` / `customer_data.phone_number` in the swap args.
+- **Cash**: `payee.phone` maps to `phone_number`.
+
+### `webhookUrl`
+
+All three form data interfaces accept an optional `webhookUrl` (camelCase). The builder maps it to `webhook_url` (snake_case) on the wire payload. The server `Payee` class and each payment input class include `webhook_url` support.
+
+### `Payee` type
+
+The SDK exports a `Payee` interface and `PayeeIdType` union from `@bloque/payments`. This mirrors the server-side `Payee` class with all fields (name, email, phone, id_type, id_number, address fields). For card payments, the builder uses the full `Payee` shape on the wire payload.
 
 ## Checkout returns `client_secret`
 
@@ -140,6 +161,27 @@ Omit `three_ds_auth_type` in production — it is ignored.
 ### 3DS iframe security
 
 Use `sandbox="allow-scripts allow-forms allow-popups"` for `srcDoc` content. Add `allow-same-origin` only when using a `src` URL.
+
+## Checkout `payment_type` and subscriptions
+
+`checkout.create()` accepts `payment_type` (default `'shopping_cart'`). For recurring payments, pass `payment_type: 'subscription'` with a `subscription` config:
+
+```ts
+const sub = await bloque.checkout.create({
+  name: 'Monthly Plan',
+  payment_type: 'subscription',
+  items: [{ name: 'Plan', amount: 29_000000, quantity: 1 }],
+  subscription: { type: 'cron', cron: '0 0 1 * *', status: 'active' },
+  success_url: 'https://app.com/success',
+  redirect_url: 'https://app.com/dashboard',
+});
+```
+
+The returned `Checkout` includes `payment_type` and `subscription` fields.
+
+## Checkout `success_url` field
+
+`checkout.create()` sends `success_url` to the server (matching the shopping cart DTO). For subscriptions, also pass `redirect_url` (the subscription DTO accepts both). The `payment_methods` field in `CheckoutParams` is **not** sent to the server — it only controls which tabs the hosted checkout UI displays.
 
 ## Asset field replaces currency
 

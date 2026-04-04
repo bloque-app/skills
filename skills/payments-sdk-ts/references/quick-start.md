@@ -152,6 +152,8 @@ const payment = await bloque.payments.create({
       expiryYear: '2028',
       cvv: '123',
       email: 'john@example.com',
+      installments: 1,
+      currency: 'COP',
       is_three_ds: true,
       browser_info: browserInfo,
       three_ds_auth_type: 'challenge_v2', // sandbox only — omit in production
@@ -195,6 +197,8 @@ const payment = await bloque.payments.create({
       documentType: 'CC',
       documentNumber: '1234567890',
       bankCode: '1007',         // Bancolombia
+      name: 'Maria Lopez',
+      phone: '+573001234567',
     },
   },
 });
@@ -227,7 +231,30 @@ if (payment.payment_code) {
 }
 ```
 
-## 8) List checkouts
+## 8) Subscription checkout
+
+```ts
+const subscription = await bloque.checkout.create({
+  name: 'Plan Profesional Mensual',
+  description: 'Acceso completo a todas las herramientas premium',
+  asset: 'USD/6',
+  payment_type: 'subscription',
+  items: [{ name: 'Suscripción mensual', amount: 29_000000, quantity: 1 }],
+  subscription: {
+    type: 'cron',
+    cron: '0 0 1 * *',
+    status: 'active',
+  },
+  success_url: 'https://yourapp.com/success',
+  cancel_url: 'https://yourapp.com/cancel',
+  redirect_url: 'https://yourapp.com/dashboard',
+});
+
+console.log('Subscription checkout:', subscription.url);
+console.log('Payment type:', subscription.payment_type); // 'subscription'
+```
+
+## 9) List checkouts
 
 ```ts
 const checkouts = await bloque.checkout.list({
@@ -241,9 +268,16 @@ for (const c of checkouts) {
 }
 ```
 
-## 9) Cancel a checkout
+## 10) Cancel a checkout
 
 ```ts
 const cancelled = await bloque.checkout.cancel('did:bloque:payments:abc123');
 console.log('Status:', cancelled.status); // 'cancelled'
+```
+
+## 11) Retrieve a public checkout (no auth)
+
+```ts
+const checkout = await bloque.checkout.retrievePublic('18f9c4e3-...');
+console.log(checkout.urn, checkout.status);
 ```
