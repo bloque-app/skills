@@ -27,7 +27,7 @@ Additional rules:
 ## When to Apply
 
 Use this skill when:
-- Creating checkout sessions with `@bloque/payments`
+- Creating checkout sessions (one-time or subscription) with `@bloque/payments`
 - Embedding hosted checkout in a web app (`@bloque/payments-core` or `@bloque/payments-react`)
 - Processing card payments with 3D Secure (3DS)
 - Polling payment status after a 3DS challenge
@@ -38,7 +38,7 @@ Use this skill when:
 ## Package Selection
 
 ```
-@bloque/payments        Server SDK (Node/Bun/Deno). secretKey auth. Checkout, payments, webhooks.
+@bloque/payments        Server SDK (Node/Bun/Deno). secretKey auth. Checkout (one-time + subscription), payments, webhooks.
 @bloque/payments-core   Browser SDK (vanilla JS/TS). Iframe checkout + 3DS overlay.
 @bloque/payments-react  React wrapper for payments-core. <BloqueCheckout> component.
 ```
