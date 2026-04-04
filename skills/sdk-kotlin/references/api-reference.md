@@ -10,17 +10,24 @@ Every SDK method, its parameters, and the exact shape of the returned object.
 
 ```kotlin
 val bloque = BloqueSDK.builder()
-    .origin("my-origin")           // Required
-    .apiKey("sk_test_...")         // Required for backend
+    .secretKey("sk_test_...")      // sk_ key — auto-exchanged for JWT (recommended)
+    // OR:
+    // .origin("my-origin")        // Required for originKey auth
+    // .originKey("my-origin-key") // Legacy origin-scoped key
     .mode(Mode.SANDBOX)            // SANDBOX or PRODUCTION
     .timeout(10000)                // Optional, ms
     .retry { ... }                 // Optional retry config
     .build()
 ```
 
+**Auth types:**
+- `.secretKey(key, scopes?)` → `AuthConfig.ApiKey` — auto-exchanges sk_ key for JWT. Origin resolved via `/me`.
+- `.originKey(key)` → `AuthConfig.OriginKey` — legacy. Requires `.origin()`. Uses `connect(alias)`.
+- `.apiKey(key)` → **Deprecated.** Use `.secretKey()` or `.originKey()`.
+
 ### `bloque.register(alias, params)` → UserSession
 
-Registers a new user identity and returns a connected session.
+Registers a new user identity and returns a connected session. **Only available for `originKey` auth.**
 
 ```kotlin
 val session = bloque.register("@alice", IndividualRegisterParams(
@@ -41,14 +48,93 @@ val session = bloque.register("@alice", IndividualRegisterParams(
 
 **Returns:** `UserSession` with `accounts`, `compliance`, `identity`, `orgs`, `swap`
 
+### `bloque.connect()` → UserSession
+
+**For `apiKey` auth.** Auto-exchanges the sk_ key for a JWT, then calls `/me` to resolve origin and URN.
+
+```kotlin
+val session = bloque.connect()
+```
+
+Throws `BloqueConfigError` if auth is not `ApiKey`.
+
 ### `bloque.connect(alias)` → UserSession
 
-Connects to an existing user. Returns the same `UserSession` shape as `register`.
+**For `originKey` auth.** Connects to an existing user via the legacy `API_KEY` challenge flow.
 
 **Critical:** The `alias` must be **exactly** the same string used in `register()`. `connect()` always returns a session — it does NOT validate identity existence. Errors surface later when calling account methods.
 
 ```kotlin
-val user = bloque.connect("@alice")
+val session = bloque.connect("@alice")
+```
+
+Throws `BloqueConfigError` if auth is not `OriginKey`.
+
+---
+
+## IdentityClient (`session.identity`)
+
+### `session.identity.me()` → IdentityMe
+
+Returns the authenticated identity's own profile. Used internally by `connect()` for `apiKey` auth.
+
+```kotlin
+val me = session.identity.me()
+// me.urn, me.origin, me.type, me.profile
+```
+
+### Identity — API Keys (`session.identity.apiKeys`)
+
+These endpoints require an authenticated user session (JWT from connect/register).
+
+#### `session.identity.apiKeys.create(params)` → CreateApiKeyResult
+
+```kotlin
+val result = session.identity.apiKeys.create(CreateApiKeyParams(
+    name = "My API Key",
+    scopes = listOf("accounts:read", "accounts:write"),
+    domains = listOf("*.example.com"),
+    expiration = "2025-12-31T23:59:59Z"
+))
+// result.keyId, result.secretKey, result.publishableKey
+```
+
+#### `session.identity.apiKeys.list()` → List\<ApiKeyInfo\>
+
+```kotlin
+val keys = session.identity.apiKeys.list()
+// keys[0].id, keyId, publishableKey, name, scopes, domains, status, expiration, lastUsedAt, createdAt
+```
+
+#### `session.identity.apiKeys.get(id)` → ApiKeyInfo
+
+```kotlin
+val key = session.identity.apiKeys.get("key-id")
+```
+
+#### `session.identity.apiKeys.exchange(params)` → ExchangeApiKeyResult
+
+Exchanges an sk_ key for a short-lived JWT. This is called automatically by the SDK when using `apiKey` auth.
+
+```kotlin
+val result = session.identity.apiKeys.exchange(ExchangeApiKeyParams(
+    key = "sk_live_...",
+    scopes = listOf("accounts:read")
+))
+// result.accessToken, result.expiresIn, result.tokenType
+```
+
+#### `session.identity.apiKeys.revoke(id)`
+
+```kotlin
+session.identity.apiKeys.revoke("key-id")
+```
+
+#### `session.identity.apiKeys.rotate(id)` → RotateApiKeyResult
+
+```kotlin
+val result = session.identity.apiKeys.rotate("key-id")
+// result.keyId, result.secretKey, result.publishableKey
 ```
 
 ---
@@ -80,7 +166,7 @@ val result = session.accounts.transfer(TransferParams(
 
 ### `session.accounts.bancolombia.create(params, config)` → BancolombiaAccount
 
-### `session.accounts.card.list()` → List<CardAccount>
+### `session.accounts.card.list()` → List\<CardAccount\>
 
 ### `session.accounts.card.freeze(cardUrn)` → CardAccount
 
@@ -141,7 +227,7 @@ Creates an organization. API path: `POST /api/orgs`.
 
 ### `session.orgs.get(orgUrn)` → Organization
 
-### `session.orgs.list()` → List<Organization>
+### `session.orgs.list()` → List\<Organization\>
 
 ---
 

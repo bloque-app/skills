@@ -22,10 +22,58 @@ The SDK uses two base URLs internally:
 
 | Config | Default (sandbox) | Used for |
 |---|---|---|
-| `baseURL` | `https://dev.bloque.app/api/payments` | All resource endpoints (`/checkout`, `/payments`, `/webhooks`) |
+| `baseURL` | `https://dev.bloque.app/api/payments` | All resource endpoints (`/`, `/link/:id`, `/:type`, `/:urn/status`) |
 | `exchangeBaseURL` | `https://dev.bloque.app/api` | Key exchange only: `POST /origins/api-keys/exchange` |
 
 The separation exists because the origins service lives under `/api`, not `/api/payments`. If you're pointing at a custom gateway, set both values explicitly.
+
+## Route mapping
+
+The SDK builds URLs relative to `baseURL` (`{apiRoot}/payments`). The server routes (`@Controller("payments")` with global prefix `api`) are:
+
+| SDK method | SDK path (relative) | Server route |
+|---|---|---|
+| `checkout.create()` | `POST /` | `POST /api/payments` |
+| `checkout.retrieve(id)` | `GET /link/${id}` | `GET /api/payments/link/:url_id` |
+| `checkout.cancel(urn)` | `PATCH /${urn}/status` | `PATCH /api/payments/:payment_urn/status` |
+| `checkout.list(params)` | `GET /` + query | `GET /api/payments` |
+| `payments.create(params)` | `POST /${type}` | `POST /api/payments/:type` |
+| `payments.getStatus(id)` | `GET /${id}` | `GET /api/payments/:payment_urn` |
+
+No Envoy gateway rewrites exist — paths are forwarded unchanged.
+
+## `cancel()` requires a payment URN
+
+`checkout.cancel()` accepts a **payment URN** (`did:bloque:payments:...`), not a checkout ID. It sends `PATCH /${urn}/status` with `{ status: 'cancelled' }` in the body.
+
+```ts
+const cancelled = await bloque.checkout.cancel(checkout.urn);
+```
+
+## `payments.create()` uses `paymentUrn`
+
+Direct payments (card / PSE / cash) require `paymentUrn` in the params object. The URN is sent as `payment_urn` in the request body to `POST /:type`:
+
+```ts
+const payment = await bloque.payments.create({
+  paymentUrn: 'did:bloque:payments:abc123',
+  payment: { type: 'card', data: { ... } },
+});
+```
+
+The deprecated `checkoutId` field is still accepted as a fallback.
+
+## Payment types: card, PSE, cash
+
+All three payment types are supported with distinct form data shapes:
+
+| Type | Form data interface | Type-specific response fields |
+|---|---|---|
+| `card` | `CardPaymentFormData` (includes 3DS fields) | `three_ds?` |
+| `pse` | `PsePaymentFormData` (person type, bank code) | `checkout_url` (redirect URL) |
+| `cash` | `CashPaymentFormData` (full name, document) | `payment_code` (10-digit code) |
+
+The `PaymentResource` builds the correct server payload for each type, mapping camelCase SDK fields to snake_case server fields.
 
 ## Checkout returns `client_secret`
 
@@ -73,7 +121,7 @@ iframeEl.srcdoc = decodeHtmlEntities(payment.three_ds.iframe);
 
 ### `getStatus()` polling
 
-After rendering the 3DS challenge iframe, poll `bloque.payments.getStatus(paymentId)` at 3-second intervals until the status is terminal (`completed` or `failed`). Cap at 60 attempts (~3 minutes).
+After rendering the 3DS challenge iframe, poll `bloque.payments.getStatus(paymentId)` at 3-second intervals until the status is terminal (`approved` or `rejected`). Cap at 60 attempts (~3 minutes).
 
 ### Sandbox `three_ds_auth_type` values
 

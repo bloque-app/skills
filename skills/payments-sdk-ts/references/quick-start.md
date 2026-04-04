@@ -31,6 +31,7 @@ const checkout = await bloque.checkout.create({
   ],
   success_url: 'https://yourapp.com/success',
   cancel_url: 'https://yourapp.com/cancel',
+  webhook_url: 'https://yourapp.com/webhooks/payment',
 });
 
 console.log('Checkout ID:', checkout.id);
@@ -54,6 +55,7 @@ const checkout = createCheckout({
   checkoutId: 'checkout_123abc',
   clientSecret: 'eyJ...',          // from your backend (checkout.client_secret)
   container: '#checkout-container',
+  paymentMethods: ['card', 'pse', 'cash'],
   onSuccess: (data) => console.log('approved', data),
   onPending: (data) => console.log('pending', data),
   onError: (error) => console.error('error', error),
@@ -82,7 +84,7 @@ export function CheckoutPage({
       publishableKey="pk_test_..."
       clientSecret={clientSecret}
       mode="sandbox"
-      paymentMethods={['card', 'pse']}
+      paymentMethods={['card', 'pse', 'cash']}
       threeDsAuthType="challenge_v2"    // sandbox only — omit in production
       onThreeDSChallenge={() => {
         console.log('3DS challenge overlay is visible');
@@ -140,7 +142,7 @@ const browserInfo: BrowserInfo = {
 };
 
 const payment = await bloque.payments.create({
-  checkoutId: 'checkout_abc123',
+  paymentUrn: 'did:bloque:payments:abc123',
   payment: {
     type: 'card',
     data: {
@@ -172,10 +174,76 @@ if (payment.three_ds?.iframe) {
     const status = await bloque.payments.getStatus(payment.id);
     console.log(`[${i + 1}/${MAX_ATTEMPTS}] status: ${status.status}`);
 
-    if (status.status === 'completed' || status.status === 'failed') {
+    if (status.status === 'approved' || status.status === 'rejected') {
       console.log('Terminal:', JSON.stringify(status, null, 2));
       break;
     }
   }
 }
+```
+
+## 6) PSE bank transfer (server-side direct API)
+
+```ts
+const payment = await bloque.payments.create({
+  paymentUrn: 'did:bloque:payments:abc123',
+  payment: {
+    type: 'pse',
+    data: {
+      email: 'user@example.com',
+      personType: 'natural',
+      documentType: 'CC',
+      documentNumber: '1234567890',
+      bankCode: '1007',         // Bancolombia
+    },
+  },
+});
+
+if (payment.checkout_url) {
+  // Redirect user to complete PSE payment
+  console.log('PSE redirect:', payment.checkout_url);
+}
+```
+
+## 7) Cash payment (server-side direct API)
+
+```ts
+const payment = await bloque.payments.create({
+  paymentUrn: 'did:bloque:payments:abc123',
+  payment: {
+    type: 'cash',
+    data: {
+      fullName: 'Carlos Martínez',
+      email: 'carlos@example.com',
+      documentType: 'CC',
+      documentNumber: '1122334455',
+    },
+  },
+});
+
+if (payment.payment_code) {
+  // Share the code with the user for in-store payment
+  console.log('Cash code:', payment.payment_code);
+}
+```
+
+## 8) List checkouts
+
+```ts
+const checkouts = await bloque.checkout.list({
+  status: 'pending',
+  limit: 10,
+  order: 'desc',
+});
+
+for (const c of checkouts) {
+  console.log(c.urn, c.status, c.amount_total);
+}
+```
+
+## 9) Cancel a checkout
+
+```ts
+const cancelled = await bloque.checkout.cancel('did:bloque:payments:abc123');
+console.log('Status:', cancelled.status); // 'cancelled'
 ```
