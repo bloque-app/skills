@@ -167,17 +167,17 @@ console.log('Payment:', payment.id, 'Status:', payment.status);
 if (payment.three_ds?.iframe) {
   console.log('3DS challenge — render iframe in browser');
 
-  // Poll for terminal status
+  // Poll for terminal status — getStatus() returns a Checkout object
   const MAX_ATTEMPTS = 60;
   const INTERVAL_MS = 3_000;
 
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     await new Promise((r) => setTimeout(r, INTERVAL_MS));
-    const status = await bloque.payments.getStatus(payment.id);
-    console.log(`[${i + 1}/${MAX_ATTEMPTS}] status: ${status.status}`);
+    const checkout = await bloque.payments.getStatus(payment.id);
+    console.log(`[${i + 1}/${MAX_ATTEMPTS}] status: ${checkout.status}`);
 
-    if (status.status === 'approved' || status.status === 'rejected') {
-      console.log('Terminal:', JSON.stringify(status, null, 2));
+    if (checkout.status === 'paid' || checkout.status === 'cancelled') {
+      console.log('Terminal:', JSON.stringify(checkout, null, 2));
       break;
     }
   }

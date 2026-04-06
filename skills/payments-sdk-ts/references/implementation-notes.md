@@ -142,7 +142,9 @@ iframeEl.srcdoc = decodeHtmlEntities(payment.three_ds.iframe);
 
 ### `getStatus()` polling
 
-After rendering the 3DS challenge iframe, poll `bloque.payments.getStatus(paymentId)` at 3-second intervals until the status is terminal (`approved` or `rejected`). Cap at 60 attempts (~3 minutes).
+After rendering the 3DS challenge iframe, poll `bloque.payments.getStatus(paymentId)` at 3-second intervals until the status is terminal (`paid` or `cancelled`). Cap at 60 attempts (~3 minutes).
+
+`getStatus()` returns a `Checkout` object (not `PaymentResponse`). The API endpoint (`GET /payments/:urn`) returns the full payment with `summary.status`; the SDK maps it to the `Checkout` shape with a top-level `status` field using `CheckoutStatus` (`'pending' | 'paid' | 'expired' | 'deposited' | 'cancelled'`).
 
 ### Sandbox `three_ds_auth_type` values
 

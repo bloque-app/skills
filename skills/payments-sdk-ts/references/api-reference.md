@@ -129,7 +129,7 @@ type ListCheckoutParams = {
 ### `bloque.payments`
 
 - `create(params: CreatePaymentParams): Promise<PaymentResponse>` — maps to `POST /:type`
-- `getStatus(paymentId: string): Promise<PaymentResponse>` — maps to `GET /:payment_urn`
+- `getStatus(paymentId: string): Promise<Checkout>` — maps to `GET /:payment_urn` (returns `Checkout` with `summary.status` hoisted to top-level `status`)
 
 ```ts
 type PaymentMethodType = 'card' | 'pse' | 'cash';
