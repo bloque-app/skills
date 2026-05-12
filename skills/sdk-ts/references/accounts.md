@@ -11,6 +11,7 @@ Accounts are the foundation. Every financial operation flows through accounts.
 | Polygon | `user.accounts.polygon` | Polygon blockchain wallet | Receive crypto |
 | Bancolombia | `user.accounts.bancolombia` | Colombian bank account | Receive COP |
 | US | `user.accounts.us` | US bank account | Receive USD |
+| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale) | ACH on-ramp / external bank linkage |
 
 ## The Pocket Pattern
 
@@ -146,6 +147,86 @@ console.log(polygon.network);   // "polygon"
   balance?: Record<string, TokenBalance>;
 }
 ```
+
+## Link an External US Bank (Plaid)
+
+Two flows. Pick one at `create()` time.
+
+| Flow | When | What you write |
+|------|------|----------------|
+| **Hosted page** | Default. Web, mobile webview, email. | Backend only. Open `details.linkUrl` in the user's browser. Server handles `public_token` on redirect. |
+| **Embedded Plaid Link** | You need full UI control inside your own app. | Backend + frontend. Drive Plaid Link with `details.linkToken`, then call `exchangePublicToken()` from your backend. |
+
+### Option A — Hosted page (recommended)
+
+Pass `returnUrl`. The response includes `details.linkUrl`. Open it in a
+browser; Bloque hosts the page, runs Plaid Link, exchanges `public_token`,
+then redirects back.
+
+```typescript
+const pending = await user.accounts.externalUsBank.create({
+  label: 'My bank',
+  ledgerId: pocket.ledgerId,
+  returnUrl: 'https://app.example.com/wallet/plaid-return',
+  state: 'user-session-xyz', // optional opaque correlator
+});
+
+if (!pending.details.linkUrl) {
+  throw new Error('Expected linkUrl — check returnUrl origin allowlist');
+}
+
+// Redirect the user (or email/SMS the link). Token TTL is short — open soon.
+redirectTo(pending.details.linkUrl);
+```
+
+After the user finishes, the hosted page redirects to:
+
+```
+https://app.example.com/wallet/plaid-return?status=success&state=user-session-xyz
+```
+
+`status` is `success`, `cancelled`, or `error`. Read final state:
+
+```typescript
+const linked = await user.accounts.get(pending.urn);
+console.log(linked.details.linkStatus); // 'active' | 'pending_link' | 'link_failed' | 'closed'
+console.log(linked.details.bankName, linked.details.bankAccountLast4);
+```
+
+**`returnUrl` origin must be in the server's `PLAID_LINK_RETURN_URL_ALLOWLIST`.** Otherwise the create call fails.
+
+### Option B — Embedded Plaid Link
+
+Omit `returnUrl`. Use `details.linkToken` to drive Plaid Link in your own
+frontend, then exchange the `public_token` from your backend.
+
+```typescript
+const pending = await user.accounts.externalUsBank.create({
+  label: 'My bank',
+  ledgerId: pocket.ledgerId,
+});
+
+if (!pending.details.linkToken) {
+  throw new Error('Expected Plaid linkToken');
+}
+// pending.details.linkToken — pass to Plaid Link on the frontend
+// pending.details.linkTokenExpiration — ISO 8601 expiry
+```
+
+Plaid returns a `public_token` when the user completes the flow. Exchange it:
+
+```typescript
+const linked = await user.accounts.externalUsBank.exchangePublicToken({
+  urn: pending.urn,
+  publicToken: '<PLAID_PUBLIC_TOKEN>',
+});
+
+console.log(linked.details.linkStatus);
+console.log(linked.details.braleAddressId);
+console.log(linked.details.bankName, linked.details.bankAccountLast4);
+```
+
+**Persist `linked.urn`.** Use it as the stable identifier for the linked bank account.
 
 ## Multi-Account Setup
 
