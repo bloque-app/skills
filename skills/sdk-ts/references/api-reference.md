@@ -737,6 +737,48 @@ const account = await user.accounts.us.create({
 
 ---
 
+## ExternalUsBankClient (`user.accounts.externalUsBank`)
+
+External US bank linkage via Brale + Plaid.
+
+### `user.accounts.externalUsBank.create(params)` → `ExternalUsBankAccount`
+
+Starts the link flow. Returns an account with either a Bloque-hosted page URL (`details.linkUrl`) or a raw Plaid `details.linkToken`, depending on whether `returnUrl` was supplied. `returnUrl` / `state` are sent on the medium `input` (`return_url` / `state`).
+
+```typescript
+const pending = await user.accounts.externalUsBank.create({
+  label?: string,
+  holderUrn?: string,
+  webhookUrl?: string,
+  ledgerId?: string,
+  metadata?: Record<string, unknown>,
+  returnUrl?: string,   // opt into hosted page flow
+  state?: string,       // opaque correlator (max 256 chars)
+});
+
+// Hosted page (returnUrl supplied):
+//   pending.details.linkUrl              → open in browser
+//   pending.details.linkTokenExpiration  → ISO 8601 expiry
+//
+// Embedded Plaid Link (no returnUrl):
+//   pending.details.linkToken            → pass to Plaid Link on frontend
+```
+
+**`returnUrl` origin must be in the server's `PLAID_LINK_RETURN_URL_ALLOWLIST`.** The hosted page redirects to `returnUrl?status=success|cancelled|error&state=<state>` when done; call `accounts.get(pending.urn)` afterwards to read the final state.
+
+### `user.accounts.externalUsBank.exchangePublicToken(params)` → `ExternalUsBankAccount`
+
+Finishes the link flow by exchanging Plaid `public_token`. Only needed for the embedded Plaid Link flow — the hosted page does this on the user's behalf.
+
+```typescript
+const linked = await user.accounts.externalUsBank.exchangePublicToken({
+  urn: pending.urn,
+  publicToken: string,
+});
+```
+
+---
+
 ## SwapClient (`user.swap`)
 
 ### `user.swap.findRates(params)` → `FindRatesResult`
