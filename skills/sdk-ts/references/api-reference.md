@@ -743,7 +743,7 @@ External US bank linkage via Brale + Plaid.
 
 ### `user.accounts.externalUsBank.create(params)` → `ExternalUsBankAccount`
 
-Starts the link flow. Returns an account with either a Bloque-hosted page URL (`details.linkUrl`) or a raw Plaid `details.linkToken`, depending on whether `returnUrl` was supplied.
+Starts the link flow. Returns an account with either a Bloque-hosted page URL (`details.linkUrl`) or a raw Plaid `details.linkToken`, depending on whether `returnUrl` was supplied. `returnUrl` / `state` are sent on the medium `input` (`return_url` / `state`).
 
 ```typescript
 const pending = await user.accounts.externalUsBank.create({

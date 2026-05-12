@@ -159,7 +159,7 @@ Two flows. Pick one at `create()` time.
 
 ### Option A — Hosted page (recommended)
 
-Pass `returnUrl`. The response includes `details.linkUrl`. Open it in a
+Pass `returnUrl` on `create()` (SDK maps it to `input.return_url` on the mediums API). The response includes `details.linkUrl`. Open it in a
 browser; Bloque hosts the page, runs Plaid Link, exchanges `public_token`,
 then redirects back.
 
