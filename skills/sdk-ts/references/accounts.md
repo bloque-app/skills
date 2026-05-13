@@ -11,7 +11,7 @@ Accounts are the foundation. Every financial operation flows through accounts.
 | Polygon | `user.accounts.polygon` | Polygon blockchain wallet | Receive crypto |
 | Bancolombia | `user.accounts.bancolombia` | Colombian bank account | Receive COP |
 | US | `user.accounts.us` | US bank account | Receive USD |
-| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale) | ACH on-ramp / external bank linkage |
+| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD → DUSD on Kusama) |
 
 ## The Pocket Pattern
 
@@ -227,6 +227,57 @@ console.log(linked.details.bankName, linked.details.bankAccountLast4);
 ```
 
 **Persist `linked.urn`.** Use it as the stable identifier for the linked bank account.
+
+### Pull funds from a linked bank (ACH debit → DUSD on Kusama)
+
+Once the bank is linked (`linkStatus === 'active'`), `pull()` debits the bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them straight to the caller's Kreivo ledger account associated with the bank URN. One call, one swap order.
+
+```typescript
+const order = await user.accounts.externalUsBank.pull({
+  urn: linked.urn,    // the URN from create() / exchangePublicToken()
+  amount: '100.00',   // USD as a decimal STRING (never a number)
+});
+
+console.log(order.orderSig);  // "0x…" — correlate webhooks (swap.order.*)
+console.log(order.status);    // "pending" | "running"
+console.log(order.graphId);   // instruction graph id
+```
+
+**Returns `PullExternalUsBankResult`:**
+
+```typescript
+{
+  orderSig?: string;   // stable handle for the swap order
+  graphId?: string;    // instruction graph executing the swap
+  status?: string;     // initial swap status
+  execution?: unknown; // raw swap.take execution payload (opaque)
+  requestId?: string;  // mediums service request id (for support tickets)
+}
+```
+
+**Errors:**
+
+| Code | Meaning | Fix |
+|------|---------|-----|
+| `400` | Invalid `amount` or `urn` | Pass `amount` as a positive decimal string (`"100.00"`) and a well-formed `external-us-bank` URN. |
+| `401` | Unauthenticated | Refresh the user session. |
+| `403` | Caller does not own the linked bank | The URN belongs to a different user; check ownership. |
+| `404` | No address mapping, or no ledger | Ensure `linkStatus === 'active'` and the bank account is fully provisioned. |
+| `503` | No swap rate available | Transient — retry after a backoff. |
+
+**Pre-flight check before calling `pull()`:**
+
+```typescript
+const account = await user.accounts.get(linked.urn);
+if (
+  account.details.linkStatus !== 'active' ||
+  !account.details.braleAddressId
+) {
+  throw new Error('Bank not ready for ACH pull — finish Plaid Link first.');
+}
+```
+
+To watch the swap to completion, subscribe to `swap.order.*` webhooks and match on `orderSig`, or poll the swap service with `user.swap.findRates`/order lookups.
 
 ## Multi-Account Setup
 

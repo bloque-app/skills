@@ -777,6 +777,24 @@ const linked = await user.accounts.externalUsBank.exchangePublicToken({
 });
 ```
 
+### `user.accounts.externalUsBank.pull(params)` → `PullExternalUsBankResult`
+
+Proactively debits the linked US bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them to the caller's Kreivo ledger account associated with the bank URN. The bank must be in `linkStatus === 'active'`.
+
+```typescript
+const order = await user.accounts.externalUsBank.pull({
+  urn: linked.urn,         // active external-us-bank account
+  amount: '100.00',        // USD as a decimal string (never a number)
+  idempotencyKey?: string, // optional caller hint
+});
+
+// order.orderSig → stable handle; correlate webhooks (swap.order.*)
+// order.status   → "pending" | "running" | …
+// order.graphId  → instruction graph id
+```
+
+Errors: `400` (invalid amount/URN), `401`, `403` (caller doesn't own the bank), `404` (not linked yet, or no ledger account), `503` (no swap rate).
+
 ---
 
 ## SwapClient (`user.swap`)
