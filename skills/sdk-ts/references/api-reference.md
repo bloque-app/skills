@@ -777,6 +777,64 @@ const linked = await user.accounts.externalUsBank.exchangePublicToken({
 });
 ```
 
+### `details` response shape — `ExternalUsBankAccountDetails`
+
+Returned on every `externalUsBank.*` call. Lifecycle fields (`linkStatus`, `linkToken`, `linkUrl`, `jwt`, `failureReason`) are populated up front; **enrichment fields** are filled in best-effort once the Plaid `public_token` is exchanged and refreshed on `accounts.get()` and Brale `address.updated` webhooks. Treat enrichment fields as optional even when `linkStatus === 'active'`.
+
+| Field | Type | Populated |
+|-------|------|-----------|
+| `id` | `string` | always |
+| `linkStatus` | `'pending_link' \| 'active' \| 'link_failed' \| 'closed'` | always |
+| `braleAccountId` | `string` | once Brale account provisioned |
+| `braleAddressId` | `string` | after `public_token` is exchanged |
+| `linkToken` | `string` | both flows |
+| `linkTokenExpiration` | `string` (ISO 8601) | both flows |
+| `linkUrl` | `string` | hosted-page flow only |
+| `jwt` | `string` | hosted-page flow only |
+| `bankAccountLast4` | `string` | after exchange |
+| `bankName` | `string` | after exchange |
+| `failureReason` | `string` | when `linkStatus === 'link_failed'` |
+| `owner` | `string` | after exchange (enrichment) — beneficiary name on Brale address |
+| `routingNumber` | `string` | after exchange (enrichment) — ABA routing |
+| `accountNumber` | `string` | after exchange (enrichment) — **masked** by Brale for Plaid-linked addresses |
+| `accountType` | `'checking' \| 'savings'` | after exchange (enrichment) |
+| `bankAddress` | `ExternalUsBankBankAddress` | after exchange (enrichment) — bank mailing address |
+| `beneficiaryAddress` | `ExternalUsBankBankAddress` | after exchange (enrichment) — beneficiary mailing address |
+| `transferTypes` | `string[]` | after exchange — rails enabled (`ach_debit`, `ach_credit`, `rtp_credit`) |
+| `needsUpdate` | `boolean` | after exchange — `true` when the Plaid item needs re-auth (redo Plaid Link) |
+| `lastUpdated` | `string` (ISO 8601) | after exchange — last Brale-side refresh |
+
+`ExternalUsBankBankAddress`:
+
+```typescript
+{
+  streetLine1: string;
+  streetLine2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  country?: string;
+}
+```
+
+### `user.accounts.externalUsBank.pull(params)` → `PullExternalUsBankResult`
+
+Proactively debits the linked US bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them to the caller's Kreivo ledger account associated with the bank URN. The bank must be in `linkStatus === 'active'`.
+
+```typescript
+const order = await user.accounts.externalUsBank.pull({
+  urn: linked.urn,         // active external-us-bank account
+  amount: '100.00',        // USD as a decimal string (never a number)
+  idempotencyKey?: string, // optional caller hint
+});
+
+// order.orderSig → stable handle; correlate webhooks (swap.order.*)
+// order.status   → "pending" | "running" | …
+// order.graphId  → instruction graph id
+```
+
+Errors: `400` (invalid amount/URN), `401`, `403` (caller doesn't own the bank), `404` (not linked yet, or no ledger account), `503` (no swap rate).
+
 ---
 
 ## SwapClient (`user.swap`)
