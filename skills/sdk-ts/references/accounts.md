@@ -11,11 +11,7 @@ Accounts are the foundation. Every financial operation flows through accounts.
 | Polygon | `user.accounts.polygon` | Polygon blockchain wallet | Receive crypto |
 | Bancolombia | `user.accounts.bancolombia` | Colombian bank account | Receive COP |
 | US | `user.accounts.us` | US bank account | Receive USD |
-<<<<<<< HEAD
-| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD → DUSD on Kusama) |
-=======
-| External US Bank | `user.accounts.externalUsBank` | Plaid (Brale) linkage surface | Link US bank accounts |
->>>>>>> 7f7749c (sync: update TS SDK skills for account filters)
+| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD -> DUSD on Kusama) |
 
 ## The Pocket Pattern
 
@@ -234,7 +230,7 @@ console.log(linked.details.bankName, linked.details.bankAccountLast4);
 
 ### Reading bank details after linking
 
-Once `linkStatus === 'active'`, the SDK surfaces the full Brale address record on `details`. These fields are populated post-exchange and refreshed on every `accounts.get()` and on Brale `address.updated` webhooks. Treat them as optional — a transient Brale outage or a not-yet-populated field leaves the previous value (or `undefined`) in place.
+Once `linkStatus === 'active'`, the SDK surfaces the full Brale address record on `details`. These fields are populated post-exchange and refreshed on every `accounts.get()` and on Brale `address.updated` webhooks. Treat them as optional - a transient Brale outage or a not-yet-populated field leaves the previous value (or `undefined`) in place.
 
 ```typescript
 const account = await user.accounts.get(linked.urn);
@@ -249,15 +245,15 @@ console.log(d.accountType);        // 'checking' | 'savings'
 console.log(d.transferTypes);      // ['ach_debit', 'ach_credit', 'rtp_credit']
 console.log(d.bankAddress);        // { streetLine1, city, state, zip, ... }
 console.log(d.beneficiaryAddress); // { streetLine1, city, state, zip, ... }
-console.log(d.needsUpdate);        // true → user must redo Plaid Link
+console.log(d.needsUpdate);        // true -> user must redo Plaid Link
 console.log(d.lastUpdated);        // ISO 8601, last Brale-side refresh
 ```
 
-**`accountNumber` is masked.** For Plaid-linked addresses Brale does not return the full account number — use `bankAccountLast4` when you only need the last four digits.
+`accountNumber` is masked. For Plaid-linked addresses Brale does not return the full account number - use `bankAccountLast4` when you only need the last four digits.
 
-**Watch `needsUpdate`.** When Brale reports `true`, the linked Plaid item needs re-authentication. The next `pull()` will fail; start a new linkage via `create()` and walk the user through Plaid Link again.
+Watch `needsUpdate`. When Brale reports `true`, the linked Plaid item needs re-authentication. The next `pull()` will fail; start a new linkage via `create()` and walk the user through Plaid Link again.
 
-### Pull funds from a linked bank (ACH debit → DUSD on Kusama)
+### Pull funds from a linked bank (ACH debit -> DUSD on Kusama)
 
 Once the bank is linked (`linkStatus === 'active'`), `pull()` debits the bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them straight to the caller's Kreivo ledger account associated with the bank URN. One call, one swap order.
 
@@ -267,12 +263,12 @@ const order = await user.accounts.externalUsBank.pull({
   amount: '100.00',   // USD as a decimal STRING (never a number)
 });
 
-console.log(order.orderSig);  // "0x…" — correlate webhooks (swap.order.*)
+console.log(order.orderSig);  // "0x..." - correlate webhooks (swap.order.*)
 console.log(order.status);    // "pending" | "running"
 console.log(order.graphId);   // instruction graph id
 ```
 
-**Returns `PullExternalUsBankResult`:**
+Returns `PullExternalUsBankResult`:
 
 ```typescript
 {
@@ -284,7 +280,7 @@ console.log(order.graphId);   // instruction graph id
 }
 ```
 
-**Errors:**
+Errors:
 
 | Code | Meaning | Fix |
 |------|---------|-----|
@@ -292,9 +288,9 @@ console.log(order.graphId);   // instruction graph id
 | `401` | Unauthenticated | Refresh the user session. |
 | `403` | Caller does not own the linked bank | The URN belongs to a different user; check ownership. |
 | `404` | No address mapping, or no ledger | Ensure `linkStatus === 'active'` and the bank account is fully provisioned. |
-| `503` | No swap rate available | Transient — retry after a backoff. |
+| `503` | No swap rate available | Transient - retry after a backoff. |
 
-**Pre-flight check before calling `pull()`:**
+Pre-flight check before calling `pull()`:
 
 ```typescript
 const account = await user.accounts.get(linked.urn);
@@ -302,7 +298,7 @@ if (
   account.details.linkStatus !== 'active' ||
   !account.details.braleAddressId
 ) {
-  throw new Error('Bank not ready for ACH pull — finish Plaid Link first.');
+  throw new Error('Bank not ready for ACH pull - finish Plaid Link first.');
 }
 ```
 
