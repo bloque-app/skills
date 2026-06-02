@@ -38,7 +38,7 @@ await user.accounts.batchTransfer({
 | Event | Type | Direction | Description |
 |-------|------|-----------|-------------|
 | `purchase` | `authorization` | `debit` | Card purchase authorized and debited. |
-| `rejected_insufficient_funds` | `authorization` | `debit` | Purchase rejected — insufficient balance. |
+| `rejected_insufficient_funds` | `authorization` | `debit` | Purchase rejected — insufficient balance. Includes `merchant`, `local_amount`, and `local_currency`. |
 | `rejected_credit` | `authorization` | `credit` | Credit authorization rejected (not supported). |
 | `rejected_currency` | `authorization` | `debit` | Purchase rejected — unsupported currency. |
 | `credit_adjustment` | `adjustment` | `credit` | Refund or credit adjustment processed. |
@@ -122,7 +122,11 @@ interface WebhookPayload {
   /** Reason for rejection (present on rejection events) */
   reason?: string;
 
-  /** Required USD amount (present on some rejection events) */
+  /**
+   * @deprecated Alias of `local_amount`, kept for backwards compatibility.
+   * Holds the transaction total in the local currency, not strictly USD.
+   * Present on rejection events. Prefer `local_amount` + `local_currency`.
+   */
   required_usd?: number;
 
   /** Total surcharge in local currency (cashback_surcharge events only) */
@@ -227,7 +231,7 @@ The `surcharge_total` and per-program `amount` values are in the merchant's loca
 
 ### Purchase Rejected (Insufficient Funds)
 
-When a purchase is rejected, the webhook is still sent but with no `fee_breakdown` (since no fees were charged) and the amount reflects what was attempted.
+When a purchase is rejected, the webhook is still sent but with no `fee_breakdown` (since no fees were charged). It carries the same `merchant`, `local_amount`, `local_currency`, and `medium` context as a successful `purchase` event, so you can identify the declined transaction and notify the cardholder. `required_usd` is a deprecated alias of `local_amount`.
 
 ```json
 {
@@ -236,7 +240,21 @@ When a purchase is rejected, the webhook is still sent but with no `fee_breakdow
   "type": "authorization",
   "direction": "debit",
   "event": "rejected_insufficient_funds",
-  "required_usd": 150.0,
+  "local_amount": 150000.0,
+  "local_currency": "COP",
+  "merchant": {
+    "name": "Almacenes Exito",
+    "mcc": "5411",
+    "city": "Bogota",
+    "country": "COL"
+  },
+  "medium": {
+    "entry_mode": "CHIP",
+    "point_type": "POS",
+    "origin": "DOMESTIC",
+    "network": "VISA"
+  },
+  "required_usd": 150000.0,
   "reason": "Insufficient funds"
 }
 ```
@@ -278,7 +296,15 @@ app.post('/webhooks/card', async (req, res) => {
 
     case 'rejected_insufficient_funds':
       console.log(`Rejected: ${payload.reason}`);
-      console.log(`Required: ${payload.required_usd} USD`);
+      console.log(
+        `Attempted: ${payload.local_amount} ${payload.local_currency} at ${payload.merchant?.name}`,
+      );
+      await notifyUser(payload.account_urn, {
+        type: 'declined',
+        merchant: payload.merchant?.name,
+        amount: payload.local_amount,
+        currency: payload.local_currency,
+      });
       break;
   }
 
