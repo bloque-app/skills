@@ -11,7 +11,7 @@ Accounts are the foundation. Every financial operation flows through accounts.
 | Polygon | `user.accounts.polygon` | Polygon blockchain wallet | Receive crypto |
 | Bancolombia | `user.accounts.bancolombia` | Colombian bank account | Receive COP |
 | US | `user.accounts.us` | US bank account | Receive USD |
-| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale) | ACH on-ramp / external bank linkage |
+| External US Bank | `user.accounts.externalUsBank` | Plaid (Brale) linkage surface | Link US bank accounts |
 
 ## The Pocket Pattern
 
@@ -256,9 +256,30 @@ const card = await user.accounts.card.create(
 const result = await user.accounts.list();
 console.log(result.accounts);  // CardAccount | VirtualAccount | PolygonAccount | etc.
 
+// List with filters
+const filtered = await user.accounts.list({
+  medium: 'card',
+  status: ['active', 'creation_in_progress'],
+  createdAfter: '2026-01-01T00:00:00.000Z',
+  createdBefore: '2026-01-31T23:59:59.999Z',
+  customId: 'card_123',
+  ledgerAccountIds: ['5Grw...', '5FHn...'],
+  limit: 50,
+  offset: 0,
+  order: 'DESC',
+});
+console.log(filtered.accounts.length);
+
 // List by type → { accounts: CardAccount[] }
 const cards = await user.accounts.card.list();
 console.log(cards.accounts);   // Array of CardAccount with balance
+
+// Medium-specific list with shared filters
+const activeCards = await user.accounts.card.list({
+  status: 'active',
+  createdAfter: '2026-01-01T00:00:00.000Z',
+});
+console.log(activeCards.accounts.length);
 
 // Get balance → Record<string, TokenBalance>
 const balance = await user.accounts.balance(pocket.urn);
@@ -284,6 +305,19 @@ const renamed = await user.accounts.card.updateName(card.urn, 'My New Card Name'
 ```
 
 **Important: `list()` wraps results in `{ accounts: [...] }`** — it does NOT return an array directly. Always access `.accounts` on the result.
+
+### List filter params
+
+`user.accounts.list()` and all medium-specific list methods (`card.list()`, `virtual.list()`, `polygon.list()`, `bancolombia.list()`, `us.list()`, `us2.list()`) support:
+
+- `holderUrn`, `urn`, `urns`, `medium`
+- `status` (`AccountStatus` or `AccountStatus[]`)
+- `createdAfter`, `createdBefore` (ISO 8601)
+- `q`, `customId`
+- `ledgerAccountId`, `ledgerAccountIds`
+- `metadata`
+- `limit`, `offset`, `order`
+- Legacy `from` / `to` (epoch ms; deprecated — prefer `createdAfter` / `createdBefore`)
 
 ## Query Transactions
 
