@@ -150,6 +150,8 @@ console.log(polygon.network);   // "polygon"
 
 ## Link an External US Bank (Plaid)
 
+Link-session fields (`linkToken`, `linkTokenExpiration`, `linkUrl`, `jwt`) are returned only while `details.linkStatus === 'pending_link'` — including right after `create()`. Once the account is `active`, `accounts.get()` omits them. Persist `urn`, not link tokens.
+
 Two flows. Pick one at `create()` time.
 
 | Flow | When | What you write |

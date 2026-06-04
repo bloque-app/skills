@@ -741,6 +741,8 @@ const account = await user.accounts.us.create({
 
 External US bank linkage via Brale + Plaid.
 
+Link-session fields (`linkToken`, `linkTokenExpiration`, `linkUrl`, `jwt`) are only present while `details.linkStatus === 'pending_link'`. Active accounts omit them on `accounts.get()` / sync.
+
 ### `user.accounts.externalUsBank.create(params)` → `ExternalUsBankAccount`
 
 Starts the link flow. Returns an account with either a Bloque-hosted page URL (`details.linkUrl`) or a raw Plaid `details.linkToken`, depending on whether `returnUrl` was supplied. `returnUrl` / `state` are sent on the medium `input` (`return_url` / `state`).
