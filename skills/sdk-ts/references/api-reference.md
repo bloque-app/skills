@@ -144,15 +144,6 @@ const result = await user.accounts.list();
 // or filter:
 const result = await user.accounts.list({ medium: 'card' });
 const result = await user.accounts.list({ urn: '...' });
-const result = await user.accounts.list({
-  status: ['active', 'creation_in_progress'],
-  createdAfter: '2026-01-01T00:00:00.000Z',
-  createdBefore: '2026-01-31T23:59:59.999Z',
-  customId: 'card_123',
-  ledgerAccountIds: ['5Grw...', '5FHn...'],
-  limit: 50,
-  order: 'DESC',
-});
 ```
 
 **Params (all optional):**
@@ -161,21 +152,7 @@ const result = await user.accounts.list({
 |-------|------|-------------|
 | `holderUrn` | `string` | Filter by holder |
 | `urn` | `string` | Get specific account |
-| `urns` | `string[]` | Filter by multiple account URNs |
-| `medium` | `'bancolombia' \| 'breb' \| 'card' \| 'external-us-bank' \| 'virtual' \| 'polygon' \| 'us-account' \| 'us2-account'` | Filter by type |
-| `status` | `AccountStatus \| AccountStatus[]` | Filter by one or more statuses |
-| `createdAfter` | `string` | Created-at lower bound (ISO 8601) |
-| `createdBefore` | `string` | Created-at upper bound (ISO 8601) |
-| `from` | `number` | Legacy created-at lower bound (epoch ms, deprecated) |
-| `to` | `number` | Legacy created-at upper bound (epoch ms, deprecated) |
-| `q` | `string` | Text search |
-| `customId` | `string` | Filter by account details.id |
-| `ledgerAccountId` | `string` | Filter by one ledger account id |
-| `ledgerAccountIds` | `string[]` | Filter by multiple ledger account ids |
-| `metadata` | `Record<string,string>` | Filter by metadata key/value pairs |
-| `limit` | `number` | Max records |
-| `offset` | `number` | Records to skip |
-| `order` | `'ASC' \| 'DESC'` | Sort by created_at |
+| `medium` | `'bancolombia' \| 'card' \| 'virtual' \| 'polygon' \| 'us-account'` | Filter by type |
 
 **Returns:**
 
@@ -341,11 +318,6 @@ const fresh = await user.accounts.get(card.urn);
 ```typescript
 const result = await user.accounts.card.list();
 const result = await user.accounts.card.list({ urn: '...' });
-const result = await user.accounts.card.list({
-  status: 'active',
-  createdAfter: '2026-01-01T00:00:00.000Z',
-  limit: 25,
-});
 ```
 
 **Params (all optional):**
@@ -354,20 +326,6 @@ const result = await user.accounts.card.list({
 |-------|------|
 | `holderUrn` | `string` |
 | `urn` | `string` |
-| `urns` | `string[]` |
-| `status` | `AccountStatus \| AccountStatus[]` |
-| `createdAfter` | `string` |
-| `createdBefore` | `string` |
-| `from` | `number` *(deprecated)* |
-| `to` | `number` *(deprecated)* |
-| `q` | `string` |
-| `customId` | `string` |
-| `ledgerAccountId` | `string` |
-| `ledgerAccountIds` | `string[]` |
-| `metadata` | `Record<string,string>` |
-| `limit` | `number` |
-| `offset` | `number` |
-| `order` | `'ASC' \| 'DESC'` |
 
 **Returns:**
 
@@ -781,13 +739,11 @@ const account = await user.accounts.us.create({
 
 ## ExternalUsBankClient (`user.accounts.externalUsBank`)
 
-Deprecated migration surface for legacy Brale + Plaid linkage. The `external-us-bank` medium is sunset on current API services.
+External US bank linkage via Brale + Plaid.
 
 ### `user.accounts.externalUsBank.create(params)` → `ExternalUsBankAccount`
 
 Starts the link flow. Returns an account with either a Bloque-hosted page URL (`details.linkUrl`) or a raw Plaid `details.linkToken`, depending on whether `returnUrl` was supplied. `returnUrl` / `state` are sent on the medium `input` (`return_url` / `state`).
-
-> Deprecated: kept for migration compatibility. Prefer supported `user.accounts.us` flows.
 
 ```typescript
 const pending = await user.accounts.externalUsBank.create({
@@ -819,46 +775,6 @@ const linked = await user.accounts.externalUsBank.exchangePublicToken({
   urn: pending.urn,
   publicToken: string,
 });
-```
-
-### `details` response shape — `ExternalUsBankAccountDetails`
-
-Returned on every `externalUsBank.*` call. Lifecycle fields (`linkStatus`, `linkToken`, `linkUrl`, `jwt`, `failureReason`) are populated up front; **enrichment fields** are filled in best-effort once the Plaid `public_token` is exchanged and refreshed on `accounts.get()` and Brale `address.updated` webhooks. Treat enrichment fields as optional even when `linkStatus === 'active'`.
-
-| Field | Type | Populated |
-|-------|------|-----------|
-| `id` | `string` | always |
-| `linkStatus` | `'pending_link' \| 'active' \| 'link_failed' \| 'closed'` | always |
-| `braleAccountId` | `string` | once Brale account provisioned |
-| `braleAddressId` | `string` | after `public_token` is exchanged |
-| `linkToken` | `string` | both flows |
-| `linkTokenExpiration` | `string` (ISO 8601) | both flows |
-| `linkUrl` | `string` | hosted-page flow only |
-| `jwt` | `string` | hosted-page flow only |
-| `bankAccountLast4` | `string` | after exchange |
-| `bankName` | `string` | after exchange |
-| `failureReason` | `string` | when `linkStatus === 'link_failed'` |
-| `owner` | `string` | after exchange (enrichment) — beneficiary name on Brale address |
-| `routingNumber` | `string` | after exchange (enrichment) — ABA routing |
-| `accountNumber` | `string` | after exchange (enrichment) — **masked** by Brale for Plaid-linked addresses |
-| `accountType` | `'checking' \| 'savings'` | after exchange (enrichment) |
-| `bankAddress` | `ExternalUsBankBankAddress` | after exchange (enrichment) — bank mailing address |
-| `beneficiaryAddress` | `ExternalUsBankBankAddress` | after exchange (enrichment) — beneficiary mailing address |
-| `transferTypes` | `string[]` | after exchange — rails enabled (`ach_debit`, `ach_credit`, `rtp_credit`) |
-| `needsUpdate` | `boolean` | after exchange — `true` when the Plaid item needs re-auth (redo Plaid Link) |
-| `lastUpdated` | `string` (ISO 8601) | after exchange — last Brale-side refresh |
-
-`ExternalUsBankBankAddress`:
-
-```typescript
-{
-  streetLine1: string;
-  streetLine2?: string;
-  city: string;
-  state: string;
-  zip: string;
-  country?: string;
-}
 ```
 
 ### `user.accounts.externalUsBank.pull(params)` → `PullExternalUsBankResult`

@@ -11,7 +11,7 @@ Accounts are the foundation. Every financial operation flows through accounts.
 | Polygon | `user.accounts.polygon` | Polygon blockchain wallet | Receive crypto |
 | Bancolombia | `user.accounts.bancolombia` | Colombian bank account | Receive COP |
 | US | `user.accounts.us` | US bank account | Receive USD |
-| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD -> DUSD on Kusama) |
+| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD → DUSD on Kusama) |
 
 ## The Pocket Pattern
 
@@ -228,32 +228,7 @@ console.log(linked.details.bankName, linked.details.bankAccountLast4);
 
 **Persist `linked.urn`.** Use it as the stable identifier for the linked bank account.
 
-### Reading bank details after linking
-
-Once `linkStatus === 'active'`, the SDK surfaces the full Brale address record on `details`. These fields are populated post-exchange and refreshed on every `accounts.get()` and on Brale `address.updated` webhooks. Treat them as optional - a transient Brale outage or a not-yet-populated field leaves the previous value (or `undefined`) in place.
-
-```typescript
-const account = await user.accounts.get(linked.urn);
-
-// Narrow the MappedAccount union to external-us-bank:
-if (!('linkStatus' in account.details)) throw new Error('Wrong medium');
-
-const d = account.details;
-console.log(d.owner);              // beneficiary name on the Brale address
-console.log(d.routingNumber);      // ABA routing number
-console.log(d.accountType);        // 'checking' | 'savings'
-console.log(d.transferTypes);      // ['ach_debit', 'ach_credit', 'rtp_credit']
-console.log(d.bankAddress);        // { streetLine1, city, state, zip, ... }
-console.log(d.beneficiaryAddress); // { streetLine1, city, state, zip, ... }
-console.log(d.needsUpdate);        // true -> user must redo Plaid Link
-console.log(d.lastUpdated);        // ISO 8601, last Brale-side refresh
-```
-
-`accountNumber` is masked. For Plaid-linked addresses Brale does not return the full account number - use `bankAccountLast4` when you only need the last four digits.
-
-Watch `needsUpdate`. When Brale reports `true`, the linked Plaid item needs re-authentication. The next `pull()` will fail; start a new linkage via `create()` and walk the user through Plaid Link again.
-
-### Pull funds from a linked bank (ACH debit -> DUSD on Kusama)
+### Pull funds from a linked bank (ACH debit → DUSD on Kusama)
 
 Once the bank is linked (`linkStatus === 'active'`), `pull()` debits the bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them straight to the caller's Kreivo ledger account associated with the bank URN. One call, one swap order.
 
@@ -263,12 +238,12 @@ const order = await user.accounts.externalUsBank.pull({
   amount: '100.00',   // USD as a decimal STRING (never a number)
 });
 
-console.log(order.orderSig);  // "0x..." - correlate webhooks (swap.order.*)
+console.log(order.orderSig);  // "0x…" — correlate webhooks (swap.order.*)
 console.log(order.status);    // "pending" | "running"
 console.log(order.graphId);   // instruction graph id
 ```
 
-Returns `PullExternalUsBankResult`:
+**Returns `PullExternalUsBankResult`:**
 
 ```typescript
 {
@@ -280,7 +255,7 @@ Returns `PullExternalUsBankResult`:
 }
 ```
 
-Errors:
+**Errors:**
 
 | Code | Meaning | Fix |
 |------|---------|-----|
@@ -288,9 +263,9 @@ Errors:
 | `401` | Unauthenticated | Refresh the user session. |
 | `403` | Caller does not own the linked bank | The URN belongs to a different user; check ownership. |
 | `404` | No address mapping, or no ledger | Ensure `linkStatus === 'active'` and the bank account is fully provisioned. |
-| `503` | No swap rate available | Transient - retry after a backoff. |
+| `503` | No swap rate available | Transient — retry after a backoff. |
 
-Pre-flight check before calling `pull()`:
+**Pre-flight check before calling `pull()`:**
 
 ```typescript
 const account = await user.accounts.get(linked.urn);
@@ -298,7 +273,7 @@ if (
   account.details.linkStatus !== 'active' ||
   !account.details.braleAddressId
 ) {
-  throw new Error('Bank not ready for ACH pull - finish Plaid Link first.');
+  throw new Error('Bank not ready for ACH pull — finish Plaid Link first.');
 }
 ```
 
@@ -332,30 +307,9 @@ const card = await user.accounts.card.create(
 const result = await user.accounts.list();
 console.log(result.accounts);  // CardAccount | VirtualAccount | PolygonAccount | etc.
 
-// List with filters
-const filtered = await user.accounts.list({
-  medium: 'card',
-  status: ['active', 'creation_in_progress'],
-  createdAfter: '2026-01-01T00:00:00.000Z',
-  createdBefore: '2026-01-31T23:59:59.999Z',
-  customId: 'card_123',
-  ledgerAccountIds: ['5Grw...', '5FHn...'],
-  limit: 50,
-  offset: 0,
-  order: 'DESC',
-});
-console.log(filtered.accounts.length);
-
 // List by type → { accounts: CardAccount[] }
 const cards = await user.accounts.card.list();
 console.log(cards.accounts);   // Array of CardAccount with balance
-
-// Medium-specific list with shared filters
-const activeCards = await user.accounts.card.list({
-  status: 'active',
-  createdAfter: '2026-01-01T00:00:00.000Z',
-});
-console.log(activeCards.accounts.length);
 
 // Get balance → Record<string, TokenBalance>
 const balance = await user.accounts.balance(pocket.urn);
@@ -381,19 +335,6 @@ const renamed = await user.accounts.card.updateName(card.urn, 'My New Card Name'
 ```
 
 **Important: `list()` wraps results in `{ accounts: [...] }`** — it does NOT return an array directly. Always access `.accounts` on the result.
-
-### List filter params
-
-`user.accounts.list()` and all medium-specific list methods (`card.list()`, `virtual.list()`, `polygon.list()`, `bancolombia.list()`, `us.list()`, `us2.list()`) support:
-
-- `holderUrn`, `urn`, `urns`, `medium`
-- `status` (`AccountStatus` or `AccountStatus[]`)
-- `createdAfter`, `createdBefore` (ISO 8601)
-- `q`, `customId`
-- `ledgerAccountId`, `ledgerAccountIds`
-- `metadata`
-- `limit`, `offset`, `order`
-- Legacy `from` / `to` (epoch ms; deprecated — prefer `createdAfter` / `createdBefore`)
 
 ## Query Transactions
 
