@@ -40,6 +40,7 @@ The SDK builds URLs relative to `baseURL` (`{apiRoot}/payments`). The server rou
 | `checkout.list(params)` | `GET /` + query | `GET /api/payments` |
 | `payments.create(params)` | `POST /${type}` | `POST /api/payments/:type` |
 | `payments.getStatus(id)` | `GET /${id}` | `GET /api/payments/:payment_urn` |
+| `payments.cancelSubscription(urn)` | `POST /subscriptions/${urn}/cancel` | `POST /api/payments/subscriptions/:payment_urn/cancel` |
 
 No Envoy gateway rewrites exist — paths are forwarded unchanged.
 
@@ -70,15 +71,19 @@ All three payment types are supported with distinct form data shapes:
 
 | Type | Form data interface | Required fields | Type-specific response fields |
 |---|---|---|---|
-| `card` | `CardPaymentFormData` | `cardNumber`, `cardholderName`, `expiryMonth`, `expiryYear`, `cvv`, `email`, `installments`, `currency` + 3DS fields | `three_ds?` |
+| `card` | `CardPaymentFormData` | `cardNumber`, `cardholderName`, `expiryMonth`, `expiryYear`, `cvv`, `email`, `currency` + optional `installments`, 3DS fields | `three_ds?` |
 | `pse` | `PsePaymentFormData` | `email`, `personType`, `documentType`, `documentNumber`, `bankCode`, `name`, `phone` | `checkout_url` (redirect URL) |
 | `cash` | `CashPaymentFormData` | `email`, `documentType`, `documentNumber`, `fullName` | `payment_code` (10-digit code) |
 
 The `PaymentResource` builds the correct server payload for each type, mapping camelCase SDK fields to snake_case server fields.
 
+### Payee preset on payment links
+
+When a checkout is created with `payeer` (stored in payment metadata), the server enforces the preset **name only** on direct payments — not email. Name matching is abbreviation-tolerant: each word the payer types must be the start of a distinct preset word (order-independent, case- and accent-insensitive). Email may differ from the preset so payers can receive receipts at any address. Mismatch returns `E_PAYEE_NAME_MISMATCH` (400).
+
 ### Card: `installments` and `currency`
 
-Card payments require `installments` (number, use `1` for single payment) and `currency` (string, e.g. `'COP'`, `'USD'`). The server uses `currency` to determine the source asset for the swap rate. Omitting these fields causes server-side validation failure.
+Card payments require `currency` (string, e.g. `'COP'`, `'USD'`). The server uses `currency` to determine the source asset for the swap rate. `installments` is optional and defaults to `12` on the server when omitted; pass `1` for a single payment.
 
 ### Payee forwarding
 
@@ -142,9 +147,9 @@ iframeEl.srcdoc = decodeHtmlEntities(payment.three_ds.iframe);
 
 ### `getStatus()` polling
 
-After rendering the 3DS challenge iframe, poll `bloque.payments.getStatus(paymentId)` at 3-second intervals until the status is terminal (`paid` or `cancelled`). Cap at 60 attempts (~3 minutes).
+After rendering the 3DS challenge iframe, poll `bloque.payments.getStatus(paymentId)` at 3-second intervals until the checkout status is terminal (`paid` or `cancelled`). Cap at 60 attempts (~3 minutes).
 
-`getStatus()` returns a `Checkout` object (not `PaymentResponse`). The API endpoint (`GET /payments/:urn`) returns the full payment with `summary.status`; the SDK maps it to the `Checkout` shape with a top-level `status` field using `CheckoutStatus` (`'pending' | 'paid' | 'expired' | 'deposited' | 'cancelled'`).
+`getStatus()` returns a `Checkout` object (not `PaymentResponse`). The API endpoint (`GET /payments/:urn`) returns the full payment with `summary.status`; the SDK maps it to the `Checkout` shape with a top-level `status` field using `CheckoutStatus` (`'created' | 'pending' | 'paid' | 'expired' | 'deposited' | 'cancelled'`).
 
 ### Sandbox `three_ds_auth_type` values
 

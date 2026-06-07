@@ -93,7 +93,7 @@ type CheckoutParams = {
   payeer?: PayeerInfo;
 };
 
-type CheckoutStatus = 'pending' | 'paid' | 'expired' | 'deposited' | 'cancelled';
+type CheckoutStatus = 'created' | 'pending' | 'paid' | 'expired' | 'deposited' | 'cancelled';
 
 type Checkout = {
   id: string;
@@ -117,6 +117,7 @@ type Checkout = {
 type ListCheckoutParams = {
   status?: CheckoutStatus;
   payment_type?: PaymentType;
+  url?: string;                            // filter by payment link URL
   payeer_search?: string;
   from_date?: string;
   to_date?: string;
@@ -130,11 +131,12 @@ type ListCheckoutParams = {
 
 - `create(params: CreatePaymentParams): Promise<PaymentResponse>` — maps to `POST /:type`
 - `getStatus(paymentId: string): Promise<Checkout>` — maps to `GET /:payment_urn` (returns `Checkout` with `summary.status` hoisted to top-level `status`)
+- `cancelSubscription(paymentUrn: string): Promise<CancelDirectSubscriptionOutput>` — maps to `POST /subscriptions/:payment_urn/cancel`
 
 ```ts
 type PaymentMethodType = 'card' | 'pse' | 'cash';
 
-type PayeeIdType = 'CC' | 'NIT' | 'RUT' | 'PASSPORT' | 'DRIVER_LICENSE';
+type PayeeIdType = 'CC' | 'CE' | 'NIT' | 'PP' | 'RUT' | 'PASSPORT' | 'DRIVER_LICENSE';
 
 type Payee = {
   name: string;
@@ -167,7 +169,7 @@ type CardPaymentFormData = {
   expiryYear: string;
   cvv: string;
   email: string;
-  installments: number;                 // 1 for single payment
+  installments?: number;                // defaults to 12 on the server when omitted
   currency: string;                     // e.g. 'COP', 'USD'
   phone?: string;
   webhookUrl?: string;
@@ -229,6 +231,19 @@ type PaymentResponse = {
   order_status?: string;
   three_ds?: ThreeDSData;
   created_at: string;
+};
+
+type CancelSubscriptionStatus =
+  | 'cancellation_pending'
+  | 'already_cancelled'
+  | 'graph_done';
+
+type CancelDirectSubscriptionOutput = {
+  status: CancelSubscriptionStatus;
+  cursor: number | null;
+  payment_urn: string;
+  order_id: string;
+  graph_id: string;
 };
 ```
 

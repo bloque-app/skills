@@ -275,7 +275,16 @@ const cancelled = await bloque.checkout.cancel('did:bloque:payments:abc123');
 console.log('Status:', cancelled.status); // 'cancelled'
 ```
 
-## 11) Retrieve a public checkout (no auth)
+## 11) Cancel a recurring subscription (direct card)
+
+```ts
+const result = await bloque.payments.cancelSubscription(
+  'did:bloque:payments:abc123',
+);
+console.log(result.status); // 'cancellation_pending' | 'already_cancelled' | 'graph_done'
+```
+
+## 12) Retrieve a public checkout (no auth)
 
 ```ts
 const checkout = await bloque.checkout.retrievePublic('18f9c4e3-...');
