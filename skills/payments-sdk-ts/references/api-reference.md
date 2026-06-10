@@ -74,7 +74,8 @@ type CheckoutParams = {
   payment_type?: PaymentType;              // default 'shopping_cart'
   items: {
     name: string;
-    description?: string;
+    sku?: string;                         // defaults to item-{n} when omitted
+    description?: string;                 // defaults to name when omitted
     amount: number;
     quantity: number;
     image_url?: string;
@@ -169,7 +170,7 @@ type CardPaymentFormData = {
   expiryYear: string;
   cvv: string;
   email: string;
-  installments?: number;                // defaults to 12 on the server when omitted
+  installments?: number;                // defaults to 1 on the server when omitted
   currency: string;                     // e.g. 'COP', 'USD'
   phone?: string;
   webhookUrl?: string;

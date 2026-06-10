@@ -14,7 +14,7 @@ new Bloque({ mode: 'sandbox', secretKey: 'sk_test_...' });
 new Bloque({ mode: 'sandbox', accessToken: 'eyJ...' });
 ```
 
-When using `secretKey`, the SDK's `HttpClient` automatically exchanges it for a short-lived JWT via `POST /origins/api-keys/exchange`. The JWT is cached and refreshed ~1 minute before expiry. No action needed on the caller's side.
+When using `secretKey`, the SDK's `HttpClient` automatically exchanges it for a short-lived JWT via `POST /api-keys/exchange`. The JWT is cached and refreshed ~1 minute before expiry. No action needed on the caller's side.
 
 ## Base URLs: `baseURL` vs `exchangeBaseURL`
 
@@ -23,7 +23,7 @@ The SDK uses two base URLs internally:
 | Config | Default (sandbox) | Used for |
 |---|---|---|
 | `baseURL` | `https://dev.bloque.app/api/payments` | All resource endpoints (`/`, `/link/:id`, `/:type`, `/:urn/status`) |
-| `exchangeBaseURL` | `https://dev.bloque.app/api` | Key exchange only: `POST /origins/api-keys/exchange` |
+| `exchangeBaseURL` | `https://dev.bloque.app/api` | Key exchange only: `POST /api-keys/exchange` |
 
 The separation exists because the origins service lives under `/api`, not `/api/payments`. If you're pointing at a custom gateway, set both values explicitly.
 
@@ -83,7 +83,11 @@ When a checkout is created with `payeer` (stored in payment metadata), the serve
 
 ### Card: `installments` and `currency`
 
-Card payments require `currency` (string, e.g. `'COP'`, `'USD'`). The server uses `currency` to determine the source asset for the swap rate. `installments` is optional and defaults to `12` on the server when omitted; pass `1` for a single payment.
+Card payments require `currency` (string, e.g. `'COP'`, `'USD'`). The server uses `currency` to determine the source asset for the swap rate. `installments` is optional and defaults to `1` on the server when omitted.
+
+### Checkout item `sku` and `description`
+
+The payments API requires `sku` and `description` on every item in `POST /payments`. The SDK forwards them when provided; otherwise it sends `sku: "item-{n}"` (1-based index) and `description: name`.
 
 ### Payee forwarding
 
