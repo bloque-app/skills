@@ -528,11 +528,28 @@ const result = await user.swap.breb.createDeposit({
 const how = result.execution?.result.how;
 if (how?.type === 'BREB_DEPOSIT') {
   // Show payer the one-time BRE-B key
-  console.log(how.keyType, how.keyValue, how.amount, how.currency);
+  console.log(how.keyType, how.keyValue, how.expectedAmount ?? how.amount, how.currency);
 }
 ```
 
 The graph resumes automatically when the inbound webhook settles (`payment.inbound.settled`).
+
+### Partial payments
+
+If the payer sends less than `order.fromAmount`, the graph stays paused on the **same** `keyValue`. Multiple BRE-B transfers are summed. `how.depositStatus` becomes `'partial'`; `remainingAmount` is derived (`expectedAmount − receivedAmount`):
+
+```typescript
+if (how?.type === 'BREB_DEPOSIT' && how.depositStatus === 'partial') {
+  console.log('Received:', how.receivedAmount, 'Still need:', how.remainingAmount);
+  console.log('Top up to same key:', how.keyValue);
+}
+```
+
+Poll `user.swap.listOrders({ graphId: result.order.graphId })` or use `swap.order.*` webhooks — the `createDeposit` response does not update when a later partial payment lands.
+
+### Overpayment
+
+Excess COP does not increase DUSD paid out; operators handle manual COP refund. Quoted `order.toAmount` DUSD is still delivered.
 
 ## BRE-B Payout (Kusama → COP)
 
