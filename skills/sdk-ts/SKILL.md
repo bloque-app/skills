@@ -26,6 +26,9 @@ TypeScript SDK for programmable financial infrastructure: identity, accounts, ca
 - Require explicit human confirmation before any money-moving or irreversible action:
   - `accounts.transfer`, `accounts.batchTransfer`
   - `swap.bankTransfer.create`
+  - `swap.breb.create`, `swap.breb.createDeposit`
+  - `swap.rtp.create`
+  - `swap.externalUsBank.create`
   - card create/freeze/disable/update controls
   - any operation that changes balances, limits, or routing rules
 - Use allowlists and schema validation before business logic. Reject unknown event types and malformed fields.
@@ -95,7 +98,7 @@ Use this flow for frontend wallets similar to `/projects/wallet/src`:
 | Org Members | `orgs.members.update`, `orgs.members.remove` |
 | Org Teams | `orgs.teams.list`, `orgs.teams.update`, `orgs.teams.listMembers`, `orgs.teams.updateMember`, `orgs.teams.removeMember` |
 | Org Invites | `orgs.invites.create`, `orgs.invites.get`, `orgs.invites.list`, `orgs.invites.accept`, `orgs.invites.reject`, `orgs.invites.resend` |
-| Swap/Top-up | `swap.findRates`, `swap.listOrders`, `swap.bankTransfer.create` |
+| Swap/Top-up | `swap.findRates`, `swap.listOrders`, `swap.bankTransfer.create`, `swap.pse.create`, `swap.breb.create`, `swap.breb.createDeposit`, `swap.rtp.create`, `swap.externalUsBank.create` |
 
 ## Quick Start
 

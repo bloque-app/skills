@@ -500,5 +500,94 @@ const result = await user.swap.pse.create({
 });
 
 // 4. Redirect user to PSE payment page
-console.log('Payment URL:', result.execution?.result.how?.url);
+if (result.execution?.result.how?.type !== 'BREB_DEPOSIT') {
+  console.log('Payment URL:', result.execution?.result.how?.url);
+}
+```
+
+## BRE-B On-Ramp Deposit (COP → Kusama)
+
+Deposit COP via a one-time BRE-B key; the escrow pays out DUSD on Kusama.
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'COP/2',
+  toAsset: 'DUSD/6',
+  fromMediums: ['breb'],
+  toMediums: ['kusama'],
+  amountSrc: '20000000',
+});
+
+const result = await user.swap.breb.createDeposit({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '20000000',
+  depositInformation: { urn: card.urn },
+  args: {}, // triggers auto-exec; server fills deposit node args
+});
+
+const how = result.execution?.result.how;
+if (how?.type === 'BREB_DEPOSIT') {
+  // Show payer the one-time BRE-B key
+  console.log(how.keyType, how.keyValue, how.amount, how.currency);
+}
+```
+
+The graph resumes automatically when the inbound webhook settles (`payment.inbound.settled`).
+
+## BRE-B Payout (Kusama → COP)
+
+```typescript
+const result = await user.swap.breb.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '1000000',
+  depositInformation: { resolutionId: 'res-7f3a2b10' },
+  args: { sourceAccountUrn: card.urn },
+});
+```
+
+## RTP Payout (Kusama → US Bank)
+
+Cash out DUSD on Kusama to a US bank account via RTP.
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'DUSD/6',
+  toAsset: 'USD/2',
+  fromMediums: ['kusama'],
+  toMediums: ['rtp'],
+  amountSrc: '100000000',
+});
+
+const result = await user.swap.rtp.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '100000000',
+  depositInformation: {
+    owner: 'Jane Doe',
+    accountNumber: '1234567890',
+    routingNumber: '063108680',
+    accountType: 'checking',
+    bankName: 'Example Bank',
+  },
+});
+```
+
+## External US Bank On-Ramp (ACH → Kusama)
+
+Pull USD from a linked US bank account via ACH; funds teleport to Kusama as DUSD.
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'USD/2',
+  toAsset: 'DUSD/6',
+  fromMediums: ['external-us-bank'],
+  toMediums: ['kusama'],
+  amountSrc: '10000',
+});
+
+const result = await user.swap.externalUsBank.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '10000',
+  depositInformation: { ledgerAccountId: 'ledger-user-001' },
+  args: { sourceAccountUrn: 'did:bloque:account:external-us-bank:abc123' },
+});
 ```
