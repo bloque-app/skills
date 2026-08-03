@@ -217,6 +217,45 @@ val status = session.compliance.kyc.getVerification(
 )
 ```
 
+### `session.compliance.tiers.getStatus(params)` → TierStatus
+
+Reads an identity's effective compliance tier, per-level requirement status, and (if not fully verified) which requirements are missing and which hosted gate resolves them. API path: `GET /api/compliance/:urn/tier-status`.
+
+```kotlin
+val status = session.compliance.tiers.getStatus(GetTierStatusParams(urn = "did:bloque:user:..."))
+// status.effectiveLevel, status.levels, status.nextLevel
+// status.missingRequirements, status.pendingRequirements (already submitted, awaiting review)
+// status.verificationFlow?.type == VerificationFlowType.TOS_HOSTED_ACCEPTANCE | DOCUMENT_SUBMISSION
+```
+
+`pendingRequirements` is the subset of `missingRequirements` already submitted and awaiting a reviewer — don't ask the user for these again. When every missing requirement is pending, `verificationFlow` is absent because there is nothing left for the user to do.
+
+### `session.compliance.tosGate.start(params)` → StartGateResult
+
+Mints a portable Level 0 TOS acceptance capability token + hosted page URL. API path: `POST /api/tos-gate/start`. `returnUrl` is **required** and must be present in the backend's return-URL allowlist.
+
+```kotlin
+val gate = session.compliance.tosGate.start(
+    StartTosGateParams(returnUrl = "https://myapp.example.com/verification-complete")
+)
+// gate.token, gate.url (open in a browser), gate.expiresIn (e.g. "30m")
+```
+
+`session.compliance.tosGate.init(TosGateInitParams(token))` and `.accept(TosGateAcceptParams(token, csrfToken))` drive the flow programmatically (authorized solely by the capability token, not the session) — normally the hosted page at `gate.url` does this for you.
+
+### `session.compliance.verificationGate.start(params)` → StartGateResult
+
+Mints a portable capability token + hosted page URL for the Phase 3 document/form submission gate. API path: `POST /api/verification-gate/start`. `returnUrl` is **optional** — omit it when there's nowhere meaningful to redirect back to. When provided, it's validated fail-closed against the union of the calling origin's own `metadata.verification_gate_return_url_allowlist` and the deployment-wide allowlist env var.
+
+```kotlin
+val gate = session.compliance.verificationGate.start(StartVerificationGateParams())
+// or: StartVerificationGateParams(returnUrl = "https://myapp.example.com/verification-complete")
+```
+
+`session.compliance.verificationGate.init(VerificationGateInitParams(token))` returns actionable `requirements` (with form `fields` and presigned `uploadIntents`) plus `pendingRequirements` already under review. `.submit(VerificationGateSubmitParams(token, csrfToken, documents, answers))` records uploads/answers — recording does **not** mean the requirement is satisfied; customer submissions always land as `pending_review` until a reviewer acts.
+
+**Usually you don't call `tosGate`/`verificationGate` directly** — catch `BloqueVerificationRequiredError` from a gated call (see Error Handling below) and use its `getVerificationLink()` instead, which reads the right endpoint from the error itself.
+
 ---
 
 ## OrgsClient (`session.orgs`)

@@ -40,6 +40,7 @@ Use this skill when:
 - Setting up card spending controls
 - Implementing OTP login (`assert` / `connect` / `register`)
 - Launching or resuming KYC verification flows
+- Reading an identity's compliance tier status, or driving the hosted TOS / verification gates (`compliance.tiers`, `compliance.tosGate`, `compliance.verificationGate`)
 - Handling card transaction webhooks
 - Transferring funds between accounts (single or batch)
 - Creating top-ups via bank transfer (`swap.findRates` + `swap.bankTransfer.create`)
@@ -113,7 +114,7 @@ val card = session.accounts.card.create(
 | Polygon | `accounts.polygon.create` |
 | Bancolombia | `accounts.bancolombia.create` |
 | Cards | `accounts.card.list`, `accounts.card.freeze`, `accounts.card.activate`, `accounts.card.update` |
-| Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification` |
+| Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification`, `compliance.tiers.getStatus`, `compliance.tosGate.start`, `compliance.verificationGate.start` |
 | Orgs | `orgs.create`, `orgs.get`, `orgs.list`, `orgs.listMembers` |
 | Swap | `swap.findRates`, `swap.listOrders`, `swap.bankTransfer.create` |
 | ColBank | `swap.colbank.*` (Colombian bank withdrawal) |
@@ -153,6 +154,9 @@ All errors extend `BloqueAPIError` and include `requestId`, `timestamp`, and `to
 | `BloqueAuthenticationError` | 401/403 | Bad API key |
 | `BloqueNotFoundError` | 404 | Resource missing |
 | `BloqueRateLimitError` | 429 | Too many requests |
+| `BloqueTierLimitExceededError` (extends `BloqueRateLimitError`) | 429 | Compliance tier usage limit exceeded (`E_TIER_LIMIT_EXCEEDED`) — has `window`, `windowKey`, `resetAt`, `limitUsdMinorUnits`, `consumedUsdMinorUnits` |
+| `BloqueVerificationRequiredError` (extends `BloqueAuthenticationError`) | 403 | Compliance tier requires more verification (`E_VERIFICATION_REQUIRED`) — has `reason` (`"tos"`/`"documents"`/`"kyc"`/`"unknown"`), `currentLevel`, `requiredLevel`, `missingRequirements`, `pendingRequirements`, and `getVerificationLink(returnUrl)` to mint a hosted-gate link in one call |
+| `BloqueVerificationPendingError` (extends `BloqueAuthenticationError`) | 403 | Everything outstanding is already submitted and under review (`E_VERIFICATION_PENDING`) — has `currentLevel`, `requiredLevel`, `pendingRequirements`. **No** `getVerificationLink()` — don't re-collect what a reviewer already has. |
 | `BloqueInsufficientFundsError` | — | Not enough balance |
 | `BloqueNetworkError` | — | Connection failed |
 
@@ -163,6 +167,24 @@ try {
     session.accounts.transfer(TransferParams(...))
 } catch (e: BloqueInsufficientFundsError) {
     println("Not enough funds: ${e.toJSON()}")
+}
+```
+
+**Compliance-gated calls** (transfers, swaps, card authorizations, ...) can throw the two verification errors above. Prefer `getVerificationLink()` over hardcoding gate endpoints:
+
+```kotlin
+import app.bloque.sdk.core.BloqueVerificationPendingError
+import app.bloque.sdk.core.BloqueVerificationRequiredError
+
+try {
+    session.accounts.transfer(TransferParams(...))
+} catch (e: BloqueVerificationRequiredError) {
+    val link = e.getVerificationLink(returnUrl = "https://myapp.example.com/verification-complete")
+    if (link != null) {
+        println("Send the user to: ${link.url}") // reason == "kyc" has no hosted-page handoff (null)
+    }
+} catch (e: BloqueVerificationPendingError) {
+    println("Already submitted — retry later, once the review lands.")
 }
 ```
 
