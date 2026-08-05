@@ -47,6 +47,11 @@ const session = await bloque.register('@alice', {
     countryOfBirthCode?: string;   // 3-letter ISO 3166-1 alpha-3 (e.g. USA, COL)
     countryOfResidenceCode?: string; // 3-letter ISO 3166-1 alpha-3 (e.g. USA, COL)
   },
+  // Optional: forward the end user's real IP when your server registers on
+  // their behalf. Bloque uses it to resolve their usage country and record
+  // it on the compliance audit trail, instead of falling back to your
+  // server's own IP.
+  clientIp: '190.85.12.4',
 });
 ```
 
@@ -83,6 +88,9 @@ Connects to an existing user using the legacy API_KEY challenge. Returns the sam
 
 ```typescript
 const user = await bloque.connect('@alice');  // originKey auth: API_KEY challenge
+// Optional: same clientIp forwarding as register(), for your server
+// connecting on the end user's behalf.
+const user = await bloque.connect('@alice', { clientIp: '190.85.12.4' });
 // user.urn, user.accounts, user.compliance, etc.
 ```
 
@@ -933,6 +941,7 @@ const result = await user.swap.pse.create({
     userLegalIdType: 'CC' | 'NIT' | 'CE';
     userLegalId: string;
     customerData: { fullName: string; phoneNumber: string };
+    redirectUrl: string;  // Required for every PSE payment — rejected up front without it
   };
   nodeId?: string;
   metadata?: Record<string, unknown>;
@@ -1038,6 +1047,97 @@ const status = await user.compliance.kyc.get({ urn: string });
 ```
 
 **Returns:** Same shape as `kyc.start`.
+
+### TosGateClient (`user.compliance.tosGate`)
+
+Level 0 Terms of Service gate. Usually you don't call this directly: catch a `BloqueVerificationRequiredError` with `reason === 'tos'` and call its `getVerificationLink()`, which calls `start()` for you and gives you a hosted URL to open in a browser — the passkey step below (if any) runs automatically on that page.
+
+Drive `init()`/`accept()` yourself only if you're building your own UI instead of using the hosted page.
+
+#### `tosGate.start(params)` → `StartGateResult`
+
+```typescript
+const gate = await user.compliance.tosGate.start({
+  returnUrl: string;  // Must be in TOS_GATE_RETURN_URL_ALLOWLIST
+});
+// { token: string; url: string; expiresIn: string }
+```
+
+#### `tosGate.init(params)` → `TosGateInitResult`
+
+```typescript
+const init = await user.compliance.tosGate.init({ token: gate.token });
+```
+
+**Returns:**
+
+```typescript
+{
+  document: { documentVersionId: string; versionLabel: string; contentHash: string; content: string };
+  csrfToken: string;         // Single-use nonce — pass to accept()
+  returnUrl: string;
+  showHome: boolean;
+  accentColor?: string;
+  // Non-null only when this TOS document requires account activation
+  // (compliance's `requiresAccountActivation`). Build a WebAuthn
+  // `PublicKeyCredentialCreationOptions` from this and call
+  // `navigator.credentials.create()`, then pass the result to `accept()`
+  // as `passkey`. `null` is always safe to ignore — accept() without a
+  // passkey still records acceptance.
+  passkey: {
+    challenge: string;       // base64url
+    context: number;         // echo back unchanged in accept()'s passkey.context
+    expiresAtBlock: number;
+    userId: string;          // base64url
+    userName: string;
+    publicAddress: string;
+    rpId?: string;
+  } | null;
+}
+```
+
+#### `tosGate.accept(params)` → `TosGateAcceptResult`
+
+```typescript
+const accept = await user.compliance.tosGate.accept({
+  token: gate.token,
+  csrfToken: init.csrfToken,
+  // Only relevant when init().passkey was non-null. Skip both to decline
+  // activation (acceptance still records).
+  deviceAttestation?: string;   // Finished 0x-hex PassDeviceAttestation, OR:
+  passkey?: {
+    credentialId: string;        // PublicKeyCredential.rawId, base64url
+    authenticatorData: string;   // response.getAuthenticatorData(), base64url
+    clientData: string;          // response.clientDataJSON, base64url
+    publicKey: string;           // response.getPublicKey() (SPKI), base64url
+    context: number;             // from init().passkey.context
+  };
+});
+```
+
+**Returns:**
+
+```typescript
+{
+  acceptance: {
+    id: string;
+    identityUrn: string;
+    documentVersionId: string;
+    documentVersionLabel: string;
+    documentHash: string;
+    acceptedAt: string;
+    authAssurance: string;
+    // Present only if you supplied deviceAttestation/passkey above.
+    accountActivation?: {
+      attempted: boolean;
+      state?: string;
+      publicAddress?: string;
+      reason?: string;    // Non-throwing: check this instead of a try/catch
+    };
+  };
+  returnUrl: string;
+}
+```
 
 ---
 

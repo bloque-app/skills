@@ -91,6 +91,7 @@ Use this flow for frontend wallets similar to `/projects/wallet/src`:
 | Cards | `accounts.card.list`, `accounts.card.freeze`, `accounts.card.activate`, `accounts.card.update`, `accounts.card.updateName` |
 | Card Tokenization | `accounts.card.tokenizeApple`, `accounts.card.tokenizeGoogle` |
 | Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification` |
+| TOS Gate | `compliance.tosGate.start`, `compliance.tosGate.init`, `compliance.tosGate.accept` (usually not called directly — see `BloqueVerificationRequiredError.getVerificationLink()`) |
 | Organizations | `orgs.create`, `orgs.get`, `orgs.list`, `orgs.verifySlug`, `orgs.delete`, `orgs.listMembers` |
 | Org Members | `orgs.members.update`, `orgs.members.remove` |
 | Org Teams | `orgs.teams.list`, `orgs.teams.update`, `orgs.teams.listMembers`, `orgs.teams.updateMember`, `orgs.teams.removeMember` |
@@ -233,6 +234,29 @@ const user = await bloque.connect('@bob');
 ```
 
 **Rule:** Never assume `connect(alias)` validates the user. Always ensure `register()` has been called first, using your own application logic.
+
+## Critical: PSE Payments Require `args.redirectUrl`
+
+Every `swap.pse.create()` call — regardless of the underlying bank gateway — is rejected up front if `args.redirectUrl` is missing. It's the URL the bank redirects the customer to once they finish (or abandon) the PSE flow at their bank.
+
+```typescript
+// ❌ Wrong — rejected before any gateway is contacted
+await user.swap.pse.create({
+  rateSig, toMedium: 'kusama', depositInformation: { urn },
+  args: { bankCode, userType: 0, customerEmail, userLegalIdType: 'CC', userLegalId, customerData },
+});
+
+// ✅ Correct
+await user.swap.pse.create({
+  rateSig, toMedium: 'kusama', depositInformation: { urn },
+  args: {
+    bankCode, userType: 0, customerEmail, userLegalIdType: 'CC', userLegalId, customerData,
+    redirectUrl: 'https://your-app.com/payment-status',
+  },
+});
+```
+
+**Rule:** Always set `args.redirectUrl` on every PSE order, even in early testing — it's enforced identically whichever bank gateway is active behind the scenes.
 
 ## Error Handling
 
