@@ -491,11 +491,14 @@ const result = await user.swap.pse.create({
   depositInformation: { urn: card.urn },
   args: {
     bankCode: banks.banks[0].code,
-    userType: 'natural',
+    userType: 0, // 0 = natural person, 1 = legal entity
     customerEmail: 'user@example.com',
     userLegalIdType: 'CC',
     userLegalId: '123456789',
-    customerData: { fullName: 'Alice Smith' },
+    customerData: { fullName: 'Alice Smith', phoneNumber: '+573001234567' },
+    // Required for every PSE payment regardless of the underlying gateway
+    // (Wompi or Cobre) — the order is rejected up front without it.
+    redirectUrl: 'https://your-app.com/payment-status',
   },
 });
 
