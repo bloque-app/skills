@@ -90,7 +90,7 @@ Use this flow for frontend wallets similar to `/projects/wallet/src`:
 | Accounts | `accounts.get`, `accounts.balance`, `accounts.balances`, `accounts.movements`, `accounts.transactions` |
 | Cards | `accounts.card.list`, `accounts.card.freeze`, `accounts.card.activate`, `accounts.card.update`, `accounts.card.updateName` |
 | Card Tokenization | `accounts.card.tokenizeApple`, `accounts.card.tokenizeGoogle` |
-| Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification` |
+| Compliance | `compliance.kyc.getVerification`, `compliance.kyc.startVerification`, `compliance.tiers.getStatus` (`graceUntil` / `nextRecomputeAt` on ToS rollout windows) |
 | Organizations | `orgs.create`, `orgs.get`, `orgs.list`, `orgs.verifySlug`, `orgs.delete`, `orgs.listMembers` |
 | Org Members | `orgs.members.update`, `orgs.members.remove` |
 | Org Teams | `orgs.teams.list`, `orgs.teams.update`, `orgs.teams.listMembers`, `orgs.teams.updateMember`, `orgs.teams.removeMember` |
