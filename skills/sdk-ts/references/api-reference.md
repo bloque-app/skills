@@ -1039,6 +1039,53 @@ const status = await user.compliance.kyc.get({ urn: string });
 
 **Returns:** Same shape as `kyc.start`.
 
+### TiersClient (`user.compliance.tiers`)
+
+#### `tiers.getStatus(params)` → `TierStatus`
+
+```typescript
+const status = await user.compliance.tiers.getStatus({ urn: user.urn });
+```
+
+**Returns:**
+
+```typescript
+{
+  identityUrn: string;
+  effectiveLevel: number;     // -1 if Level 0 is open
+  policyVersion: string;
+  levels: Array<{
+    level: number;
+    name: string;
+    satisfied: boolean;
+    requirements: Array<{
+      key: string;
+      kind: string;           // e.g. 'tos', 'kyc', 'document'
+      status: 'satisfied' | 'not_satisfied' | 'expired' | 'revoked' | 'pending_review';
+      description?: string;
+      title?: string;
+      fields?: RequirementField[];
+      requiresUpload?: boolean;
+      submittedAt?: string;
+      // Set only on `tos` while a rollout enforcement_starts_at window
+      // keeps the requirement satisfied — prompt acceptance before this.
+      graceUntil?: string;
+    }>;
+  }>;
+  nextLevel?: number;
+  missingRequirements: string[];
+  pendingRequirements: string[];
+  verificationFlow?: {
+    type: 'tos_hosted_acceptance' | 'document_submission';
+    method: 'POST';
+    startEndpoint: string;
+    responseUrlField: string;
+  };
+  // Earliest ISO-8601 instant this answer can change with no further input.
+  nextRecomputeAt?: string | null;
+}
+```
+
 ---
 
 ## OrgsClient (`user.orgs`)
