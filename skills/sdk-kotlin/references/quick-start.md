@@ -63,7 +63,10 @@ val bloque = BloqueSDK.builder()
     .mode(Mode.SANDBOX)
     .build()
 
-val session = bloque.connect("@alice")
+// clientIp (v0.0.31+): pass the END USER's IP from your inbound request,
+// not your own server's egress IP — used for compliance/TOS-country
+// resolution and audit. Optional today; a future release requires it.
+val session = bloque.connect("@alice", clientIp = requestIp)
 ```
 
 ## First Request

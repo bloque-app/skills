@@ -42,7 +42,12 @@ val session = bloque.register("@alice", IndividualRegisterParams(
         postalCode = "33101",
         countryOfBirthCode = "USA",
         countryOfResidenceCode = "USA"
-    )
+    ),
+    // v0.0.31+: the END USER's IP from your inbound request, not your own
+    // server's egress IP. Used for compliance/TOS-country resolution and
+    // recorded on compliance audit rows. Optional; a future release will
+    // require it for originKey register()/connect().
+    clientIp = requestIp
 ))
 ```
 
@@ -66,6 +71,10 @@ Throws `BloqueConfigError` if auth is not `ApiKey`.
 
 ```kotlin
 val session = bloque.connect("@alice")
+
+// v0.0.31+: pass clientIp on every connect() too — resolved per-request,
+// not cached from register(). See bloque.register() above.
+val session = bloque.connect("@alice", clientIp = requestIp)
 ```
 
 Throws `BloqueConfigError` if auth is not `OriginKey`.
