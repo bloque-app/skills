@@ -11,7 +11,7 @@ Accounts are the foundation. Every financial operation flows through accounts.
 | Polygon | `user.accounts.polygon` | Polygon blockchain wallet | Receive crypto |
 | Bancolombia | `user.accounts.bancolombia` | Colombian bank account | Receive COP |
 | US | `user.accounts.us` | US bank account | Receive USD |
-| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD → DUSD on Kusama) |
+| External US Bank | `user.accounts.externalUsBank` | Link a US bank via Plaid (Brale), then `pull()` to ACH-debit on demand | ACH on-ramp (USD → DUSD on Kusama, or USDC on Base) |
 
 ## The Pocket Pattern
 
@@ -228,15 +228,24 @@ console.log(linked.details.bankName, linked.details.bankAccountLast4);
 
 **Persist `linked.urn`.** Use it as the stable identifier for the linked bank account.
 
-### Pull funds from a linked bank (ACH debit → DUSD on Kusama)
+### Pull funds from a linked bank (ACH debit → DUSD on Kusama or USDC on Base)
 
-Once the bank is linked (`linkStatus === 'active'`), `pull()` debits the bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them straight to the caller's Kreivo ledger account associated with the bank URN. One call, one swap order.
+Once the bank is linked (`linkStatus === 'active'`), `pull()` debits the bank via Brale ACH. Omit `chain` (or pass `'kusama'`) to swap the proceeds to DUSD on Kusama, teleporting them straight to the caller's Kreivo ledger account associated with the bank URN. Pass `chain: 'base'` with `walletAddress` to receive USDC on Base at that 0x — no ledger account is required.
 
 ```typescript
 const order = await user.accounts.externalUsBank.pull({
   urn: linked.urn,    // the URN from create() / exchangePublicToken()
   amount: '100.00',   // USD as a decimal STRING (never a number)
 });
+
+// USDC on Base:
+const baseOrder = await user.accounts.externalUsBank.pull({
+  urn: linked.urn,
+  amount: '100.00',
+  chain: 'base',
+  walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+});
+```
 
 console.log(order.orderSig);  // "0x…" — correlate webhooks (swap.order.*)
 console.log(order.status);    // "pending" | "running"
@@ -259,7 +268,7 @@ console.log(order.graphId);   // instruction graph id
 
 | Code | Meaning | Fix |
 |------|---------|-----|
-| `400` | Invalid `amount` or `urn` | Pass `amount` as a positive decimal string (`"100.00"`) and a well-formed `external-us-bank` URN. |
+| `400` | Invalid `amount` or `urn`, or Base destination fields are incomplete | Pass `amount` as a positive decimal string (`"100.00"`) and a well-formed `external-us-bank` URN. `chain: 'base'` requires `walletAddress`; `walletAddress` requires `chain: 'base'`. |
 | `401` | Unauthenticated | Refresh the user session. |
 | `403` | Caller does not own the linked bank | The URN belongs to a different user; check ownership. |
 | `404` | No address mapping, or no ledger | Ensure `linkStatus === 'active'` and the bank account is fully provisioned. |

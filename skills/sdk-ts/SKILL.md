@@ -95,7 +95,7 @@ Use this flow for frontend wallets similar to `/projects/wallet/src`:
 | Org Members | `orgs.members.update`, `orgs.members.remove` |
 | Org Teams | `orgs.teams.list`, `orgs.teams.update`, `orgs.teams.listMembers`, `orgs.teams.updateMember`, `orgs.teams.removeMember` |
 | Org Invites | `orgs.invites.create`, `orgs.invites.get`, `orgs.invites.list`, `orgs.invites.accept`, `orgs.invites.reject`, `orgs.invites.resend` |
-| Swap/Top-up | `swap.findRates`, `swap.listOrders`, `swap.bankTransfer.create` |
+| Swap/Top-up | `swap.findRates`, `swap.listOrders`, `swap.bankTransfer.create`, `swap.externalUsBank.create`, `swap.rtp.create` |
 
 ## Quick Start
 
