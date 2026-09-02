@@ -779,21 +779,24 @@ const linked = await user.accounts.externalUsBank.exchangePublicToken({
 
 ### `user.accounts.externalUsBank.pull(params)` → `PullExternalUsBankResult`
 
-Proactively debits the linked US bank via Brale ACH and swaps the proceeds to DUSD on Kusama, teleporting them to the caller's Kreivo ledger account associated with the bank URN. The bank must be in `linkStatus === 'active'`.
+Proactively debits the linked US bank via Brale ACH. Omit `chain` (or pass `'kusama'`) to swap the proceeds to DUSD on Kusama, teleporting them to the caller's Kreivo ledger account associated with the bank URN. Pass `chain: 'base'` with `walletAddress` to receive USDC on Base at that 0x. The bank must be in `linkStatus === 'active'`.
 
 ```typescript
 const order = await user.accounts.externalUsBank.pull({
   urn: linked.urn,         // active external-us-bank account
   amount: '100.00',        // USD as a decimal string (never a number)
+  chain?: 'kusama' | 'base', // omit = Kusama DUSD
+  walletAddress?: string,  // required when chain is 'base' (0x)
   idempotencyKey?: string, // optional caller hint
 });
+```
 
 // order.orderSig → stable handle; correlate webhooks (swap.order.*)
 // order.status   → "pending" | "running" | …
 // order.graphId  → instruction graph id
 ```
 
-Errors: `400` (invalid amount/URN), `401`, `403` (caller doesn't own the bank), `404` (not linked yet, or no ledger account), `503` (no swap rate).
+Errors: `400` (invalid amount/URN, or Base destination fields incomplete), `401`, `403` (caller doesn't own the bank), `404` (not linked yet, or Kusama path has no ledger account), `503` (no swap rate).
 
 ---
 
@@ -1001,6 +1004,65 @@ const result = await user.swap.bankTransfer.create({
     bankAccountHolderIdentificationValue: string;
   };
   args: { sourceAccountUrn: string };
+  nodeId?: string;
+  metadata?: Record<string, unknown>;
+});
+```
+
+**Returns:** Same shape as `CreatePseOrderResult` (order + execution + requestId).
+
+---
+
+## ExternalUsBankSwapClient (`user.swap.externalUsBank`)
+
+### `user.swap.externalUsBank.create(params)` → `CreateExternalUsBankOrderResult`
+
+ACH on-ramp from a linked US bank. Omit `toMedium` (or pass `'kusama'`) to land DUSD on Kusama. Pass `toMedium: 'base'` with `depositInformation.walletAddress` to land USDC on Base.
+
+```typescript
+const result = await user.swap.externalUsBank.create({
+  rateSig: string;
+  toMedium?: 'kusama' | 'base';         // Default: 'kusama'
+  amountSrc?: string;
+  amountDst?: string;
+  type?: 'src' | 'dst';
+  depositInformation:
+    | { ledgerAccountId: string }                    // Kusama
+    | { walletAddress: string; walletName?: string }; // Base
+  args: { sourceAccountUrn: string };
+  nodeId?: string;
+  metadata?: Record<string, unknown>;
+});
+```
+
+**Returns:** Same shape as `CreatePseOrderResult` (order + execution + requestId).
+
+---
+
+## RtpClient (`user.swap.rtp`)
+
+### `user.swap.rtp.create(params)` → `CreateRtpOrderResult`
+
+US instant bank payout. Omit `fromMedium` (or pass `'kusama'`) to debit DUSD from a Kusama account. Pass `fromMedium: 'base'` with `args.txHash` to cash out USDC already sent to the source EVM/Polygon account on Base.
+
+```typescript
+const result = await user.swap.rtp.create({
+  rateSig: string;
+  fromMedium?: 'kusama' | 'base';       // Default: 'kusama'
+  amountSrc?: string;
+  amountDst?: string;
+  type?: 'src' | 'dst';
+  depositInformation: {
+    owner: string;
+    accountNumber: string;
+    routingNumber: string;
+    accountType: 'checking' | 'savings';
+    bankName?: string;
+  };
+  args: {
+    sourceAccountUrn: string;           // Kusama account, or EVM account on Base
+    txHash?: string;                    // Required when fromMedium is 'base'
+  };
   nodeId?: string;
   metadata?: Record<string, unknown>;
 });
