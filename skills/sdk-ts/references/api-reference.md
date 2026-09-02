@@ -470,7 +470,9 @@ const result = await user.accounts.card.tokenizeGoogle(card.urn, {
 
 ### `user.accounts.card.disable(urn)` → `CardAccount`
 
-All three lifecycle methods return the updated `CardAccount` object.
+### `user.accounts.card.delete(urn)` → `CardAccount`
+
+All four lifecycle methods return the updated `CardAccount` object. `delete` is irreversible (`status: 'deleted'`).
 
 ---
 
@@ -541,6 +543,10 @@ const updated = await user.accounts.virtual.updateMetadata({
 
 ### `user.accounts.virtual.disable(urn)` → `VirtualAccount`
 
+### `user.accounts.virtual.delete(urn)` → `VirtualAccount`
+
+`delete` is irreversible (`status: 'deleted'`).
+
 ---
 
 ## PolygonClient (`user.accounts.polygon`)
@@ -588,6 +594,10 @@ const polygon = await user.accounts.polygon.create(
 ### `user.accounts.polygon.freeze(urn)` → `PolygonAccount`
 
 ### `user.accounts.polygon.disable(urn)` → `PolygonAccount`
+
+### `user.accounts.polygon.delete(urn)` → `PolygonAccount`
+
+`delete` is irreversible (`status: 'deleted'`).
 
 ---
 
@@ -789,14 +799,15 @@ const order = await user.accounts.externalUsBank.pull({
   walletAddress?: string,  // required when chain is 'base' (0x)
   idempotencyKey?: string, // optional caller hint
 });
-```
 
 // order.orderSig → stable handle; correlate webhooks (swap.order.*)
 // order.status   → "pending" | "running" | …
 // order.graphId  → instruction graph id
 ```
 
-Errors: `400` (invalid amount/URN, or Base destination fields incomplete), `401`, `403` (caller doesn't own the bank), `404` (not linked yet, or Kusama path has no ledger account), `503` (no swap rate).
+The SDK throws `BloqueConfigError` before the request if `chain: 'base'` is missing `walletAddress`, or the reverse.
+
+Errors: `400` (invalid amount/URN, or Base destination fields incomplete), `401`, `403` (caller doesn't own the bank), `404` (not linked yet, or Kusama path has no ledger account), `503` (no swap rate for `external-us-bank → kusama` or `external-us-bank → base`).
 
 ---
 
@@ -808,8 +819,8 @@ Errors: `400` (invalid amount/URN, or Base destination fields incomplete), `401`
 const rates = await user.swap.findRates({
   fromAsset: string;        // e.g., 'COP/2'
   toAsset: string;          // e.g., 'DUSD/6'
-  fromMediums: string[];    // e.g., ['pse', 'bancolombia']
-  toMediums: string[];      // e.g., ['kusama', 'pomelo']
+  fromMediums: string[];    // e.g., ['pse', 'bancolombia', 'external-us-bank', 'base']
+  toMediums: string[];      // e.g., ['kusama', 'base', 'rtp']
   amountSrc?: string;       // Raw integer string
   amountDst?: string;       // Raw integer string (provide one, not both)
   sort?: 'asc' | 'desc';
@@ -856,17 +867,24 @@ const rates = await user.swap.findRates({
 
 ```typescript
 const result = await user.swap.listOrders();
-// or with filters:
-const result = await user.swap.listOrders({ status: 'completed', limit: 20 });
+const result = await user.swap.listOrders({
+  status: 'completed',
+  after: Date.now() - 86400000,
+});
 ```
 
 **Params (all optional):**
 
 | Param | Type |
 |-------|------|
-| `status` | `string` |
-| `limit` | `number` |
-| `offset` | `number` |
+| `orderSig` | `string` |
+| `swapSig` | `string` |
+| `rateSig` | `string` |
+| `makerUrn` | `string` |
+| `status` | `'pending' \| 'in_progress' \| 'completed' \| 'failed'` |
+| `graphId` | `string` |
+| `after` | `number` (unix ms) |
+| `before` | `number` (unix ms) |
 
 **Returns:**
 
@@ -896,6 +914,17 @@ const result = await user.swap.listOrders({ status: 'completed', limit: 20 });
     updatedAt: string;
   }>
 }
+```
+
+### `user.swap.cancelSubscription(params)` → `CancelSubscriptionResult`
+
+Stops future occurrences of a recurring-card subscription. In-flight occurrences are not interrupted.
+
+```typescript
+const result = await user.swap.cancelSubscription({
+  orderId: order.orderSig, // order_sig of the subscription
+});
+// result.status → 'cancellation_pending' | 'already_cancelled' | 'graph_done'
 ```
 
 ---
@@ -1020,20 +1049,47 @@ const result = await user.swap.bankTransfer.create({
 ACH on-ramp from a linked US bank. Omit `toMedium` (or pass `'kusama'`) to land DUSD on Kusama. Pass `toMedium: 'base'` with `depositInformation.walletAddress` to land USDC on Base.
 
 ```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'USD/2',
+  toAsset: 'DUSD/6',
+  fromMediums: ['external-us-bank'],
+  toMediums: ['kusama'],
+  amountSrc: '10000',
+});
+
 const result = await user.swap.externalUsBank.create({
-  rateSig: string;
-  toMedium?: 'kusama' | 'base';         // Default: 'kusama'
-  amountSrc?: string;
-  amountDst?: string;
-  type?: 'src' | 'dst';
-  depositInformation:
-    | { ledgerAccountId: string }                    // Kusama
-    | { walletAddress: string; walletName?: string }; // Base
-  args: { sourceAccountUrn: string };
-  nodeId?: string;
-  metadata?: Record<string, unknown>;
+  rateSig: rates.rates[0].sig,
+  amountSrc: '10000',
+  depositInformation: { ledgerAccountId: pocket.ledgerId },
+  args: { sourceAccountUrn: linked.urn },
+  webhookUrl: 'https://api.example.com/webhooks/swap',
 });
 ```
+
+USDC on Base — no ledger account required:
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'USD/2',
+  toAsset: 'USDC/6',
+  fromMediums: ['external-us-bank'],
+  toMediums: ['base'],
+  amountSrc: '10000',
+});
+
+const result = await user.swap.externalUsBank.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '10000',
+  toMedium: 'base',
+  depositInformation: {
+    walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
+    walletName: 'Treasury', // optional
+  },
+  args: { sourceAccountUrn: linked.urn },
+});
+```
+
+The SDK throws `BloqueConfigError` before the request if `toMedium` is `'base'` and `walletAddress` is empty, or if the Kusama path is missing `ledgerAccountId`.
 
 **Returns:** Same shape as `CreatePseOrderResult` (order + execution + requestId).
 
@@ -1046,27 +1102,58 @@ const result = await user.swap.externalUsBank.create({
 US instant bank payout. Omit `fromMedium` (or pass `'kusama'`) to debit DUSD from a Kusama account. Pass `fromMedium: 'base'` with `args.txHash` to cash out USDC already sent to the source EVM/Polygon account on Base.
 
 ```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'DUSD/6',
+  toAsset: 'USD/2',
+  fromMediums: ['kusama'],
+  toMediums: ['rtp'],
+  amountSrc: '100000000',
+});
+
 const result = await user.swap.rtp.create({
-  rateSig: string;
-  fromMedium?: 'kusama' | 'base';       // Default: 'kusama'
-  amountSrc?: string;
-  amountDst?: string;
-  type?: 'src' | 'dst';
+  rateSig: rates.rates[0].sig,
+  amountSrc: '100000000',
   depositInformation: {
-    owner: string;
-    accountNumber: string;
-    routingNumber: string;
-    accountType: 'checking' | 'savings';
-    bankName?: string;
-  };
-  args: {
-    sourceAccountUrn: string;           // Kusama account, or EVM account on Base
-    txHash?: string;                    // Required when fromMedium is 'base'
-  };
-  nodeId?: string;
-  metadata?: Record<string, unknown>;
+    owner: 'Jane Doe',
+    accountNumber: '1234567890',
+    routingNumber: '063108680',
+    accountType: 'checking',
+    bankName: 'Example Bank',
+  },
+  args: { sourceAccountUrn: pocket.urn },
+  webhookUrl: 'https://api.example.com/webhooks/swap',
 });
 ```
+
+From Base USDC:
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'USDC/6',
+  toAsset: 'USD/2',
+  fromMediums: ['base'],
+  toMediums: ['rtp'],
+  amountSrc: '100000000',
+});
+
+const result = await user.swap.rtp.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '100000000',
+  fromMedium: 'base',
+  depositInformation: {
+    owner: 'Jane Doe',
+    accountNumber: '1234567890',
+    routingNumber: '063108680',
+    accountType: 'checking',
+  },
+  args: {
+    sourceAccountUrn: polygon.urn, // EVM/Polygon account that received USDC on Base
+    txHash: '0xabc…',              // incoming USDC transfer on Base
+  },
+});
+```
+
+The SDK throws `BloqueConfigError` before the request if `fromMedium` is `'base'` and `txHash` is empty.
 
 **Returns:** Same shape as `CreatePseOrderResult` (order + execution + requestId).
 

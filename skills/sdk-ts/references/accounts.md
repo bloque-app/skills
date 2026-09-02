@@ -238,18 +238,17 @@ const order = await user.accounts.externalUsBank.pull({
   amount: '100.00',   // USD as a decimal STRING (never a number)
 });
 
-// USDC on Base:
+console.log(order.orderSig);  // "0x…" — correlate webhooks (swap.order.*)
+console.log(order.status);    // "pending" | "running"
+console.log(order.graphId);   // instruction graph id
+
+// USDC on Base — no ledger account required:
 const baseOrder = await user.accounts.externalUsBank.pull({
   urn: linked.urn,
   amount: '100.00',
   chain: 'base',
   walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
 });
-```
-
-console.log(order.orderSig);  // "0x…" — correlate webhooks (swap.order.*)
-console.log(order.status);    // "pending" | "running"
-console.log(order.graphId);   // instruction graph id
 ```
 
 **Returns `PullExternalUsBankResult`:**
@@ -271,7 +270,7 @@ console.log(order.graphId);   // instruction graph id
 | `400` | Invalid `amount` or `urn`, or Base destination fields are incomplete | Pass `amount` as a positive decimal string (`"100.00"`) and a well-formed `external-us-bank` URN. `chain: 'base'` requires `walletAddress`; `walletAddress` requires `chain: 'base'`. |
 | `401` | Unauthenticated | Refresh the user session. |
 | `403` | Caller does not own the linked bank | The URN belongs to a different user; check ownership. |
-| `404` | No address mapping, or no ledger | Ensure `linkStatus === 'active'` and the bank account is fully provisioned. |
+| `404` | No address mapping, or Kusama path has no ledger | Ensure `linkStatus === 'active'` and `details.braleAddressId` is set. Base pulls do not need a ledger account. |
 | `503` | No swap rate available | Transient — retry after a backoff. |
 
 **Pre-flight check before calling `pull()`:**
@@ -331,6 +330,7 @@ const account = await user.accounts.get(pocket.urn);
 const activated = await user.accounts.card.activate(urn);
 const frozen = await user.accounts.card.freeze(urn);
 const disabled = await user.accounts.card.disable(urn);
+const deleted = await user.accounts.card.delete(urn); // irreversible
 console.log(frozen.status);  // "frozen"
 
 // Update metadata → returns updated account object

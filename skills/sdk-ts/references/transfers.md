@@ -502,3 +502,54 @@ const result = await user.swap.pse.create({
 // 4. Redirect user to PSE payment page
 console.log('Payment URL:', result.execution?.result.how?.url);
 ```
+
+## ACH On-Ramp (External US Bank)
+
+Pull USD from a linked US bank. Default lands DUSD on Kusama. Pass `toMedium: 'base'` to land USDC on Base.
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'USD/2',
+  toAsset: 'DUSD/6',
+  fromMediums: ['external-us-bank'],
+  toMediums: ['kusama'],
+  amountSrc: '10000',
+});
+
+const result = await user.swap.externalUsBank.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '10000',
+  depositInformation: { ledgerAccountId: pocket.ledgerId },
+  args: { sourceAccountUrn: linked.urn },
+});
+```
+
+Shortcut when the bank is already linked (`linkStatus === 'active'`): `user.accounts.externalUsBank.pull({ urn, amount })`. For Base, pass `chain: 'base'` and `walletAddress`.
+
+## RTP Payout (US Bank)
+
+Cash out DUSD on Kusama — or USDC already sent to an EVM account on Base — to a US bank via RTP.
+
+```typescript
+const rates = await user.swap.findRates({
+  fromAsset: 'DUSD/6',
+  toAsset: 'USD/2',
+  fromMediums: ['kusama'],
+  toMediums: ['rtp'],
+  amountSrc: '100000000',
+});
+
+const result = await user.swap.rtp.create({
+  rateSig: rates.rates[0].sig,
+  amountSrc: '100000000',
+  depositInformation: {
+    owner: 'Jane Doe',
+    accountNumber: '1234567890',
+    routingNumber: '063108680',
+    accountType: 'checking',
+  },
+  args: { sourceAccountUrn: pocket.urn },
+});
+```
+
+For Base, use `fromAsset: 'USDC/6'`, `fromMediums: ['base']`, `fromMedium: 'base'`, and `args.txHash` of the incoming USDC transfer.
